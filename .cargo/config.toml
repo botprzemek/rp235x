@@ -1,6 +1,7 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-# runner = "probe-rs run --chip RP235x"
-runner = "elf2uf2-rs -d"
+# runner = "probe-rs run --chip RP235x target/thumbv8m.main-none-eabihf/release/rp235x"
+# runner = "elf2uf2-rs -d"
+runner = "picotool load --update --verify --execute -t elf"
 linker = "flip-link"
 
 [build]
@@ -8,3 +9,5 @@ target = "thumbv8m.main-none-eabihf"
 
 [env]
 DEFMT_LOG = "debug"
+WIFI_SSID = ""
+WIFI_PASSWORD = ""
