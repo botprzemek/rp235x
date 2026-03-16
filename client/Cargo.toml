@@ -1,0 +1,8 @@
+[package]
+edition = "2024"
+name = "rp235x-client"
+version = "0.1.0"
+publish = false
+
+[profile.release]
+debug = 2

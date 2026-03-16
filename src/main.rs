@@ -1,36 +1,38 @@
-//! This example uses the RP Pico W board Wifi chip (cyw43).
-//! Creates an Access point Wifi network and creates a TCP endpoint on port 1234.
-
 #![no_std]
 #![no_main]
 #![allow(async_fn_in_trait)]
 
+mod net;
+
+use crate::net::udp_task;
 use cyw43::{JoinOptions, aligned_bytes};
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_net::{Config, Ipv4Address, Ipv4Cidr, StackResources};
+use embassy_net::{Config, DhcpConfig, StackResources};
 use embassy_rp::clocks::RoscRng;
 use embassy_rp::gpio::{Level, Output};
-use embassy_rp::peripherals::{DMA_CH0, PIO0};
-use embassy_rp::pio::{InterruptHandler, Pio};
-use embassy_rp::{bind_interrupts, dma};
-use embassy_time::Duration;
-use embassy_time::Timer;
+use embassy_rp::peripherals::{DMA_CH0, PIO0, USB};
+use embassy_rp::{bind_interrupts, dma, pio, usb};
+use embassy_usb::Builder;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
-    PIO0_IRQ_0 => InterruptHandler<PIO0>;
+    PIO0_IRQ_0 => pio::InterruptHandler<PIO0>;
     DMA_IRQ_0 => dma::InterruptHandler<DMA_CH0>;
+    USBCTRL_IRQ => usb::InterruptHandler<USB>;
 });
 
-const WIFI_NETWORK: &str = env!("WIFI_SSID"); // change to your network SSID
-const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD"); // change to your network password
+const WIFI_NETWORK: &str = env!("WIFI_SSID");
+const WIFI_PASSWORD: &str = env!("WIFI_PASSWORD");
 
 #[embassy_executor::task]
 async fn cyw43_task(
-    runner: cyw43::Runner<'static, cyw43::SpiBus<Output<'static>, PioSpi<'static, PIO0, 0>>>,
+    runner: cyw43::Runner<
+        'static,
+        cyw43::SpiBus<Output<'static>, cyw43_pio::PioSpi<'static, PIO0, 0>>,
+    >,
 ) -> ! {
     runner.run().await
 }
@@ -40,10 +42,48 @@ async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'sta
     runner.run().await
 }
 
+#[embassy_executor::task]
+async fn usb_task(driver: usb::Driver<'static, USB>) {
+    let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
+
+    config.device_class = 0;
+    config.device_sub_class = 0;
+    config.device_protocol = 0;
+    config.device_release = 0x0010;
+    config.max_packet_size_0 = 64;
+    config.manufacturer = Some("rp235x");
+    config.product = Some("rp235x");
+    config.serial_number = Some("test-serial");
+    config.composite_with_iads = false;
+    config.max_power = 100;
+
+    static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
+    static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
+    static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
+
+    static LOGGER_STATE: StaticCell<embassy_usb::class::cdc_acm::State> = StaticCell::new();
+    let state = LOGGER_STATE.init(embassy_usb::class::cdc_acm::State::new());
+
+    let mut builder = Builder::new(
+        driver,
+        config,
+        CONFIG_DESCRIPTOR.init([0; 256]),
+        BOS_DESCRIPTOR.init([0; 256]),
+        &mut [],
+        CONTROL_BUF.init([0; 64]),
+    );
+    let logger_class = embassy_usb::class::cdc_acm::CdcAcmClass::new(&mut builder, state, 64);
+    let logger = embassy_usb_logger::with_class!(1024, log::LevelFilter::Info, logger_class);
+
+    let mut usb = builder.build();
+
+    embassy_futures::join::join(usb.run(), logger).await;
+}
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
-    let mut rng = RoscRng;
+    let driver = usb::Driver::new(p.USB, Irqs);
 
     let fw = aligned_bytes!("bin/cyw43-firmware/43439A0.bin");
     let clm = aligned_bytes!("bin/cyw43-firmware/43439A0_clm.bin");
@@ -51,7 +91,7 @@ async fn main(spawner: Spawner) {
 
     let pwr = Output::new(p.PIN_23, Level::Low);
     let cs = Output::new(p.PIN_25, Level::High);
-    let mut pio = Pio::new(p.PIO0, Irqs);
+    let mut pio = pio::Pio::new(p.PIO0, Irqs);
     let spi = PioSpi::new(
         &mut pio.common,
         pio.sm0,
@@ -64,6 +104,7 @@ async fn main(spawner: Spawner) {
     );
 
     static STATE: StaticCell<cyw43::State> = StaticCell::new();
+
     let state = STATE.init(cyw43::State::new());
     let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw, nvram).await;
     spawner.spawn(unwrap!(cyw43_task(runner)));
@@ -73,51 +114,52 @@ async fn main(spawner: Spawner) {
         .set_power_management(cyw43::PowerManagementMode::PowerSave)
         .await;
 
-    // let config = Config::dhcpv4(Default::default());
-    let config = Config::ipv4_static(embassy_net::StaticConfigV4 {
-        address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 0, 200), 24),
-        gateway: Some(Ipv4Address::new(192, 168, 0, 1)),
-        dns_servers: heapless::Vec::new(),
-    });
+    let mut dhcp = DhcpConfig::default();
+    if let Ok(hostname) = heapless::String::<32>::try_from("pico2w.local") {
+        dhcp.hostname = Some(hostname);
+    }
 
-    // Generate random seed
+    let net_config = Config::dhcpv4(dhcp);
+
+    let mut rng = RoscRng;
     let seed = rng.next_u64();
 
-    // Init network stack
     static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
     let (stack, runner) = embassy_net::new(
         net_device,
-        config,
+        net_config,
         RESOURCES.init(StackResources::new()),
         seed,
     );
 
     spawner.spawn(unwrap!(net_task(runner)));
+    spawner.spawn(unwrap!(usb_task(driver)));
 
     while let Err(err) = control
         .join(WIFI_NETWORK, JoinOptions::new(WIFI_PASSWORD.as_bytes()))
         .await
     {
-        info!("join failed: {:?}", err);
+        log::info!("net join failed: {:?}", err);
     }
 
-    info!("waiting for link...");
     stack.wait_link_up().await;
-
-    info!("waiting for DHCP...");
     stack.wait_config_up().await;
 
-    // And now we can use it!
-    info!("Stack is up!");
-
-    let delay = Duration::from_millis(250);
-    loop {
-        info!("led on!");
-        control.gpio_set(0, true).await;
-        Timer::after(delay).await;
-
-        info!("led off!");
-        control.gpio_set(0, false).await;
-        Timer::after(delay).await;
+    if let Some(config) = stack.config_v4() {
+        log::info!("----- net stack -----");
+        log::info!("mac:     {:?}", stack.hardware_address().as_eui_64());
+        log::info!(
+            "ip:      {:?}/{:?}",
+            config.address.address(),
+            config.address.netmask()
+        );
+        if let Some(gateway) = config.gateway {
+            log::info!("gateway: {:?}", gateway);
+        }
+    } else {
+        log::info!("net stack failed, exiting.");
+        return;
     }
+
+    spawner.spawn(unwrap!(udp_task(stack)));
 }
