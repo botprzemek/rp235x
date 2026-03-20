@@ -4,13 +4,12 @@
 
 mod net;
 
-use crate::net::udp_task;
+use crate::net::{http_task, ssdp_task, udp_task};
 use cyw43::{JoinOptions, aligned_bytes};
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_net::{Config, DhcpConfig, StackResources};
-use embassy_rp::clocks::RoscRng;
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals::{DMA_CH0, PIO0, USB};
 use embassy_rp::{bind_interrupts, dma, pio, usb};
@@ -44,18 +43,23 @@ async fn net_task(mut runner: embassy_net::Runner<'static, cyw43::NetDriver<'sta
 
 #[embassy_executor::task]
 async fn usb_task(driver: usb::Driver<'static, USB>) {
-    let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
+    static VENDOR_ID: u16 = 0x04E8;
+    static PRODUCT_ID: u16 = 0x6860;
 
-    config.device_class = 0;
-    config.device_sub_class = 0;
-    config.device_protocol = 0;
-    config.device_release = 0x0010;
-    config.max_packet_size_0 = 64;
-    config.manufacturer = Some("rp235x");
-    config.product = Some("rp235x");
-    config.serial_number = Some("test-serial");
+    let mut config = embassy_usb::Config::new(VENDOR_ID, PRODUCT_ID);
+
     config.composite_with_iads = false;
-    config.max_power = 100;
+
+    config.device_class = 0xEF;
+    config.device_sub_class = 0x02;
+    config.device_protocol = 0x01;
+    config.device_release = 0x0200;
+    config.max_packet_size_0 = 64;
+
+    config.manufacturer = Some("Samsung");
+    config.product = Some("Samsung-Tizen-FamilyHub");
+    config.serial_number = Some("30CDA7ABCDEF");
+    config.max_power = 500;
 
     static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
     static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
@@ -80,6 +84,9 @@ async fn usb_task(driver: usb::Driver<'static, USB>) {
     embassy_futures::join::join(usb.run(), logger).await;
 }
 
+static STATE: StaticCell<cyw43::State> = StaticCell::new();
+static RESOURCES: StaticCell<StackResources<5>> = StaticCell::new();
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
@@ -103,8 +110,6 @@ async fn main(spawner: Spawner) {
         dma::Channel::new(p.DMA_CH0, Irqs),
     );
 
-    static STATE: StaticCell<cyw43::State> = StaticCell::new();
-
     let state = STATE.init(cyw43::State::new());
     let (net_device, mut control, runner) = cyw43::new(state, pwr, spi, fw, nvram).await;
     spawner.spawn(unwrap!(cyw43_task(runner)));
@@ -115,20 +120,18 @@ async fn main(spawner: Spawner) {
         .await;
 
     let mut dhcp = DhcpConfig::default();
-    if let Ok(hostname) = heapless::String::<32>::try_from("pico2w.local") {
+    if let Ok(hostname) = heapless::String::<32>::try_from("Samsung-FamilyHub") {
         dhcp.hostname = Some(hostname);
     }
 
     let net_config = Config::dhcpv4(dhcp);
 
-    let mut rng = RoscRng;
+    let mut rng = embassy_rp::clocks::RoscRng;
     let seed = rng.next_u64();
-
-    static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
     let (stack, runner) = embassy_net::new(
         net_device,
         net_config,
-        RESOURCES.init(StackResources::new()),
+        RESOURCES.init(StackResources::<5>::new()),
         seed,
     );
 
@@ -162,4 +165,6 @@ async fn main(spawner: Spawner) {
     }
 
     spawner.spawn(unwrap!(udp_task(stack)));
+    spawner.spawn(unwrap!(ssdp_task(stack)));
+    spawner.spawn(unwrap!(http_task(stack)));
 }

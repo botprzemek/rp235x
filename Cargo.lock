@@ -1768,7 +1768,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rp235x-bin"
+name = "rp235x"
 version = "0.1.0"
 dependencies = [
  "assign-resources",
