@@ -5,7 +5,7 @@
     "features": {
         "ghcr.io/devcontainers/features/rust:1": {},
     },
-    "postStartCommand": "git config --global sequence.editor \"code --wait\" && rustup target add thumbv8m.main-none-eabihf && cargo install --locked flip-link cargo-binutils",
+    "postStartCommand": "git config --global sequence.editor \"code --wait\" && rustup target add thumbv8m.main-none-eabihf && rustup component add llvm-tools && cargo install --locked flip-link cargo-binutils",
     "remoteUser": "vscode",
     "mounts": [
         "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached",

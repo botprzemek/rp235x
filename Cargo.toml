@@ -24,11 +24,6 @@ test = false
 doctest = false
 bench = false
 
-[package.metadata.embassy]
-build = [
-  { target = "thumbv8m.main-none-eabihf", artifact-dir = "out/examples/rp235x" }
-]
-
 [dependencies]
 
 embassy-embedded-hal = { version = "0.6.0", features = ["defmt"] }
