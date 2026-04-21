@@ -33,14 +33,15 @@ const USB_CONFIG: embassy_usb::Config<'static> = {
     config
 };
 
+pub struct UsbPeripherals {
+    pub usb: embassy_rp::Peri<'static, embassy_rp::peripherals::USB>,
+}
+
 pub struct Usb;
 
 impl Usb {
-    pub fn init(
-        spawner: embassy_executor::Spawner,
-        usb: embassy_rp::Peri<'static, embassy_rp::peripherals::USB>,
-    ) {
-        let driver = embassy_rp::usb::Driver::new(usb, irqs::Irqs);
+    pub fn init(spawner: embassy_executor::Spawner, usb_peripherals: UsbPeripherals) {
+        let driver = embassy_rp::usb::Driver::new(usb_peripherals.usb, irqs::Irqs0);
 
         spawner.spawn(unwrap!(usb_task(driver)));
     }
@@ -60,10 +61,21 @@ async fn usb_task(driver: usb::Driver<'static, peripherals::USB>) -> () {
     );
 
     let logger_class = cdc_acm::CdcAcmClass::new(&mut usb_builder, logger_state, 64);
-    let with_logger = with_class!(2048, log::LevelFilter::Debug, logger_class);
     let mut usb_device = usb_builder.build();
 
-    join(usb_device.run(), with_logger).await;
+    let echo_fut = async {
+        loop {
+            class.wait_connection().await;
+            log::info!("Connected");
+            let _ = echo(&mut class).await;
+            log::info!("Disconnected");
+        }
+    };
+
+    let usb_future = usb_device.run();
+    let log_future = with_class!(2048, log::LevelFilter::Debug, logger_class);
+
+    join(usb_future, join(log_future)).await;
 
     log::info!("usb::device up");
     log::info!("usb::logger up");

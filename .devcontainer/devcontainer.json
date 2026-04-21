@@ -81,7 +81,8 @@
                 "terminal.integrated.wordWrap": "off",
 
                 "chat.agent.enabled": false,
-                "chat.agentsControl.enabled": false,
+                "editor.inlineSuggest.enabled": false,
+                "chat.agentsControl.enabled": "hidden",
                 "chat.checkpoints.enabled": false,
                 "chat.extensionTools.enabled": false,
                 "chat.tips.enabled": false,

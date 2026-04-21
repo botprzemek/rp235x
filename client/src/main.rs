@@ -40,13 +40,13 @@ fn reset_pico(target: &str) -> io::Result<()> {
     let socket = UdpSocket::bind("0.0.0.0:0")?;
     socket.set_read_timeout(Some(Duration::from_secs(2)))?;
 
-    println!("sending bootsel", target);
+    println!("sending bootsel: {}", target);
     socket.send_to(b"BOOTSEL", target)?;
 
     let mut buf = [0u8; 1024];
     match socket.recv_from(&mut buf) {
         Ok((n, _)) => {
-            println!("response", String::from_utf8_lossy(&buf[..n]));
+            println!("response: {}", String::from_utf8_lossy(&buf[..n]));
         }
         Err(_) => {
             println!("no response");
@@ -67,7 +67,7 @@ fn listen_ssdp() -> io::Result<()> {
 
     let mut buf = [0u8; 2048];
     loop {
-        let (n, addr) = socket.recv_from(&mut buf)?;
+        let (n, _addr) = socket.recv_from(&mut buf)?;
         println!("{}", String::from_utf8_lossy(&buf[..n]));
     }
 }
