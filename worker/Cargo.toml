@@ -1,0 +1,61 @@
+[package]
+name = "rp235x"
+version = "0.1.0"
+edition = "2024"
+
+[profile.dev]
+opt-level = 1
+debug = true
+incremental = true
+
+[profile.release]
+lto = true
+opt-level = "s"
+incremental = false
+codegen-units = 1
+debug = true
+
+[[bin]]
+name = "rp235x"
+path = "src/main.rs"
+test = false
+doctest = false
+bench = false
+
+[dependencies]
+game = { path = "../game", features = ["defmt"] }
+game-net = { path = "../game-net", features = ["defmt"] }
+
+embassy-embedded-hal = { version = "0.6.0", features = ["defmt"] }
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
+embassy-futures = { version = "0.1.2", features = [] }
+embassy-net = { version = "0.9.0", features = ["defmt", "icmp", "tcp", "udp", "raw", "dhcpv4", "dhcpv4-hostname", "medium-ethernet", "dns"] }
+embassy-rp = { version = "0.10.0", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"] }
+embassy-sync = { version = "0.8.0" , features = ["defmt"] }
+embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime"] }
+
+cyw43 = { version = "0.7.0", features = ["defmt", "firmware-logs"] }
+cyw43-pio = { version = "0.10.0", features = ["defmt"] }
+
+defmt = { version = "1.1.0", features = [] }
+defmt-rtt = { version = "1.0.0", features = [] }
+
+cortex-m = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt =  { version = "0.7.0", features = [] }
+
+critical-section =  { version = "1.1", features = [] }
+embedded-io-async = { version = "0.7.0", features = ["defmt"] }
+panic-probe = { version = "1.0.0", features = ["print-defmt"] }
+static_cell = { version = "2.1", features = [] }
+heapless = "0.9.3"
+
+[patch.crates-io]
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+cyw43 = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+cyw43-pio = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }

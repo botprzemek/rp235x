@@ -6,8 +6,7 @@ build-std-features = ["panic_immediate_abort"]
 target = "thumbv8m.main-none-eabihf"
 
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-# runner = "probe-rs run --chip RP235x"
-runner = "picotool load --update --verify --execute -t elf"
+runner = "probe-rs run --chip RP235x --speed 12000"
 linker = "flip-link"
 
 [env]
