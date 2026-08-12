@@ -1,7 +1,14 @@
+use futures_util::{SinkExt, StreamExt};
+use gloo_net::websocket::{Message, futures::WebSocket};
 use gloo_timers::callback::Interval;
+use std::cell::RefCell;
+use std::rc::Rc;
 use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::spawn_local;
 use web_sys::HtmlCanvasElement;
 use yew::prelude::*;
+
+const SERVER_URL: &str = "ws://127.0.0.1:3000/ws";
 
 #[derive(Clone, Copy, PartialEq)]
 struct Action {
@@ -72,9 +79,63 @@ fn app() -> Html {
     let away_score = use_state(|| 0u32);
     let seconds_elapsed = use_state(|| 0u32);
     let is_running = use_state(|| false);
-    let action_stack = use_state(|| Vec::<Action>::new());
+    let action_stack = use_state(Vec::<Action>::new);
+
+    let ws_writer = use_state(|| {
+        Rc::new(RefCell::new(
+            None::<futures_util::stream::SplitSink<WebSocket, Message>>,
+        ))
+    });
+    let connection_status = use_state(|| "Rozłączono".to_string());
 
     let canvas_ref = use_node_ref();
+
+    {
+        let _home_score = home_score.clone();
+        let _away_score = away_score.clone();
+        let ws_writer = ws_writer.clone();
+        let connection_status = connection_status.clone();
+
+        use_effect_with((), move |_| {
+            spawn_local(async move {
+                connection_status.set("Łączenie z serwerem...".to_string());
+                match WebSocket::open(SERVER_URL) {
+                    Ok(ws) => {
+                        connection_status.set("Połączono".to_string());
+                        let (writer, mut reader) = ws.split();
+                        ws_writer.set(Rc::new(RefCell::new(Some(writer))));
+
+                        while let Some(msg) = reader.next().await {
+                            match msg {
+                                Ok(Message::Text(text)) => {
+                                    web_sys::console::log_1(
+                                        &format!("Odebrano tekst: {}", text).into(),
+                                    );
+                                }
+                                Ok(Message::Bytes(bytes)) => {
+                                    web_sys::console::log_1(
+                                        &format!("Odebrano bajty: {} bajtów", bytes.len()).into(),
+                                    );
+                                }
+                                Err(err) => {
+                                    web_sys::console::error_1(
+                                        &format!("Błąd WebSocket: {:?}", err).into(),
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+                        connection_status.set("Rozłączono".to_string());
+                        ws_writer.set(Rc::new(RefCell::new(None)));
+                    }
+                    Err(e) => {
+                        connection_status.set(format!("Błąd połączenia: {:?}", e));
+                    }
+                }
+            });
+            || {}
+        });
+    }
 
     {
         let canvas_ref = canvas_ref.clone();
@@ -93,7 +154,7 @@ fn app() -> Html {
                 let width = canvas.width() as usize;
                 let height = canvas.height() as usize;
 
-                context.set_fill_style(&wasm_bindgen::JsValue::from_str("#050505"));
+                context.set_fill_style_str("#050505");
                 context.fill_rect(0.0, 0.0, width as f64, height as f64);
 
                 let home_str = format!("{:03}", home_score);
@@ -104,7 +165,7 @@ fn app() -> Html {
                 let block_width = home_str.len() * 8;
                 let gap_px = 17;
 
-                context.set_fill_style(&wasm_bindgen::JsValue::from_str("#FF0000"));
+                context.set_fill_style_str("#FF0000");
 
                 for y in 0..height {
                     for x in 0..width {
@@ -165,18 +226,41 @@ fn app() -> Html {
         });
     }
 
+    let send_ws_message = {
+        let ws_writer = ws_writer.clone();
+        move |msg_text: String| {
+            let ws_writer = ws_writer.clone();
+            spawn_local(async move {
+                let mut writer_opt = ws_writer.borrow_mut();
+                if let Some(writer) = writer_opt.as_mut() {
+                    std::mem::drop(writer.send(Message::Text(msg_text)));
+                }
+            });
+        }
+    };
+
     let add_score = {
         let home_score = home_score.clone();
         let away_score = away_score.clone();
         let action_stack = action_stack.clone();
+        let send_ws_message = send_ws_message.clone();
+
         Callback::from(move |(team, points): (Team, u8)| {
             let mut stack = (*action_stack).clone();
             stack.push(Action { team, points });
             action_stack.set(stack);
 
             match team {
-                Team::Home => home_score.set(*home_score + points as u32),
-                Team::Away => away_score.set(*away_score + points as u32),
+                Team::Home => {
+                    let new_score = *home_score + points as u32;
+                    home_score.set(new_score);
+                    send_ws_message(format!("HOME_SCORE:{}", new_score));
+                }
+                Team::Away => {
+                    let new_score = *away_score + points as u32;
+                    away_score.set(new_score);
+                    send_ws_message(format!("AWAY_SCORE:{}", new_score));
+                }
             }
         })
     };
@@ -210,12 +294,15 @@ fn app() -> Html {
         let seconds_elapsed = seconds_elapsed.clone();
         let is_running = is_running.clone();
         let action_stack = action_stack.clone();
+        let send_ws_message = send_ws_message.clone();
+
         Callback::from(move |_| {
             is_running.set(false);
             home_score.set(0);
             away_score.set(0);
             seconds_elapsed.set(0);
             action_stack.set(Vec::new());
+            send_ws_message("RESET".to_string());
         })
     };
 
@@ -224,7 +311,10 @@ fn app() -> Html {
 
     html! {
         <div style="background-color: #121212; color: #e0e0e0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0;">
-            <h1>{ "LED Matrix Scoreboard Simulator (64x32)" }</h1>
+            <div style="font-size: 14px; margin-bottom: 10px; color: #aaa;">
+                { "Status WebSocket: " } <span style="color: #4caf50; font-weight: bold;">{ (*connection_status).clone() }</span>
+            </div>
+
             <div style="background-color: #000; padding: 15px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.8); border: 2px solid #333; margin-bottom: 20px;">
                 <canvas ref={canvas_ref} width="64" height="32" style="display: block; width: 512px; height: 256px; image-rendering: pixelated; image-rendering: crisp-edges;"></canvas>
             </div>
@@ -232,20 +322,20 @@ fn app() -> Html {
             <div style="display: flex; flex-direction: column; background: #1e1e1e; padding: 20px; border-radius: 10px; border: 1px solid #333; width: 500px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; gap: 5px;">
-                        <button class="btn-blue" onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Home, 1))}>{ "+1" }</button>
-                        <button class="btn-blue" onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Home, 2))}>{ "+2" }</button>
-                        <button class="btn-blue" onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Home, 3))}>{ "+3" }</button>
+                        <button onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Home, 1))}>{ "+1" }</button>
+                        <button onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Home, 2))}>{ "+2" }</button>
+                        <button onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Home, 3))}>{ "+3" }</button>
                     </div>
 
                     <div style="display: flex; gap: 5px;">
-                        <button class="btn-red" onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Away, 1))}>{ "+1" }</button>
-                        <button class="btn-red" onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Away, 2))}>{ "+2" }</button>
-                        <button class="btn-red" onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Away, 3))}>{ "+3" }</button>
+                        <button onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Away, 1))}>{ "+1" }</button>
+                        <button onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Away, 2))}>{ "+2" }</button>
+                        <button onclick={let add_score = add_score.clone(); move |_| add_score.emit((Team::Away, 3))}>{ "+3" }</button>
                     </div>
                 </div>
 
                 <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 15px;">
-                    <button class="btn-action" onclick={undo}>{ "Cofnij (Undo)" }</button>
+                    <button onclick={undo}>{ "Cofnij (Undo)" }</button>
                     <button onclick={toggle_play} style={format!("background-color: {}; color: white; border: 1px solid #555; padding: 8px; flex: 1; border-radius: 4px; cursor: pointer; font-weight: bold;", start_stop_bg)}>{ start_stop_text }</button>
                     <button onclick={reset_game} style="background-color: #424242; color: white; border: 1px solid #555; padding: 8px; flex: 1; border-radius: 4px; cursor: pointer; font-weight: bold;">{ "RESET" }</button>
                 </div>

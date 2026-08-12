@@ -1,0 +1,15 @@
+[package]
+name = "bridge"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = { version = "0.8.9", features = ["ws"] }
+axum-extra = { version = "0.12.6", features = ["typed-header"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+headers = { version = "0.4" }
+tokio = { version = "1.0", features = ["full"] }
+tokio-tungstenite = { version = "0.30.0" }
+tower-http = { version = "0.7.0", features = ["fs", "trace"] }
+tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
