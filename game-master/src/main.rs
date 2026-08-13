@@ -12,7 +12,7 @@ fn main() {
         .unwrap();
 
     let mut game = Game::new(Discipline::FIBA5V5);
-    let pico_endpoint = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 104)), 12346);
+    let pico_endpoint = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 103)), 12346);
 
     let mut last_tick_time: i64 = 0;
     let mut sequence_id: u8 = 0;
