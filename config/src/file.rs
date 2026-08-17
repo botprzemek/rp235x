@@ -47,7 +47,7 @@ impl FileReader for Config {
         let mut buffer = [0u8; CONFIG_SIZE];
         file.read_exact(&mut buffer)?;
 
-        Self::from_bytes(&buffer)
+        Self::from_bytes(&buffer).cloned()
     }
 
     fn read_file(path: &Path) -> Result<Self, ConfigError> {

@@ -138,29 +138,48 @@ impl Config {
         unsafe { slice::from_raw_parts((self as *const Self) as *const u8, CONFIG_SIZE) }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ConfigError> {
-        use core::ptr;
+    // pub fn from_bytes1(bytes: &[u8]) -> Result<Self, ConfigError> {
+    //     use core::ptr;
 
+    //     if bytes.len() < CONFIG_SIZE {
+    //         return Err(ConfigError::Serialization);
+    //     }
+
+    //     let mut config = Self::default();
+
+    //     unsafe {
+    //         ptr::copy_nonoverlapping(
+    //             bytes.as_ptr(),
+    //             &mut config as *mut Self as *mut u8,
+    //             CONFIG_SIZE,
+    //         );
+    //     }
+
+    //     if !config.verify_integrity() {
+    //         config.zeroize();
+    //         return Err(ConfigError::IntegrityCheckFailed);
+    //     }
+
+    //     Ok(config)
+    // }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<&Self, ConfigError> {
         if bytes.len() < CONFIG_SIZE {
             return Err(ConfigError::Serialization);
         }
 
-        let mut config = Self::default();
-
-        unsafe {
-            ptr::copy_nonoverlapping(
-                bytes.as_ptr(),
-                &mut config as *mut Self as *mut u8,
-                CONFIG_SIZE,
-            );
+        let ptr = bytes.as_ptr();
+        if !(ptr as usize).is_multiple_of(core::mem::align_of::<Self>()) {
+            return Err(ConfigError::Serialization);
         }
 
-        if !config.verify_integrity() {
-            config.zeroize();
+        let config_ref = unsafe { &*(ptr as *const Self) };
+
+        if !config_ref.verify_integrity() {
             return Err(ConfigError::IntegrityCheckFailed);
         }
 
-        Ok(config)
+        Ok(config_ref)
     }
 
     pub fn get_serial_number(&self) -> Result<&str, ConfigError> {
@@ -179,15 +198,23 @@ impl Config {
         Self::parse_str(&self.wifi_password)
     }
 
+    // pub fn read1() -> Result<&'static Self, ConfigError> {
+    //     unsafe {
+    //         let ptr = CONFIG_ADDR as *const Config;
+    //         let config_ref = &*ptr;
+    //         if !config_ref.verify_integrity() {
+    //             return Err(ConfigError::IntegrityCheckFailed);
+    //         }
+
+    //         Ok(config_ref)
+    //     }
+    // }
+
     pub fn read() -> Result<&'static Self, ConfigError> {
         unsafe {
-            let ptr = CONFIG_ADDR as *const Config;
-            let config_ref = &*ptr;
-            if !config_ref.verify_integrity() {
-                return Err(ConfigError::IntegrityCheckFailed);
-            }
+            let bytes = core::slice::from_raw_parts(CONFIG_ADDR as *const u8, CONFIG_SIZE);
 
-            Ok(config_ref)
+            Self::from_bytes(bytes)
         }
     }
 

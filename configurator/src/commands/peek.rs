@@ -36,5 +36,5 @@ fn read_flash() -> Result<Config, ConfigError> {
     core.read_8(CONFIG_ADDR.try_into().unwrap(), &mut buffer)
         .unwrap();
 
-    Config::from_bytes(&buffer)
+    Config::from_bytes(&buffer).cloned()
 }
