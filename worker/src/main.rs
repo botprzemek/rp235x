@@ -3,11 +3,9 @@
 
 mod core0;
 mod core1;
-mod interrupts;
 mod led;
 mod net;
 mod shared;
-mod state;
 
 use embassy_rp::multicore::{Stack, spawn_core1};
 use {defmt_rtt as _, panic_probe as _};

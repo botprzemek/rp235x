@@ -181,6 +181,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "config"
+version = "0.1.0"
+dependencies = [
+ "defmt 1.1.0",
+ "serde",
+]
+
+[[package]]
 name = "cordyceps"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1361,6 +1369,7 @@ dependencies = [
 name = "rp235x"
 version = "0.1.0"
 dependencies = [
+ "config",
  "cortex-m",
  "cortex-m-rt",
  "critical-section",

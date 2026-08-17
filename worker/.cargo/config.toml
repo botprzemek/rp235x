@@ -11,5 +11,3 @@ linker = "flip-link"
 
 [env]
 DEFMT_LOG = "debug"
-WIFI_SSID = "ALFA-SYSTEM.PL-7490"
-WIFI_PASSWORD = "66915188!Aa"

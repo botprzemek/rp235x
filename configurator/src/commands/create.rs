@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 
-use config::DeviceConfig;
+use config::{
+    Config,
+    file::{FileReader, FileWriter},
+    print::Print,
+};
 
 use anyhow::Error;
 use clap::Args;
@@ -12,12 +16,9 @@ pub struct CreateArgs {
     pub verbose: bool,
 
     #[arg(short, long, default_value = "config.json")]
-    pub config: PathBuf,
+    pub input: PathBuf,
 
-    #[arg(short, long, default_value = "firmware.bin")]
-    pub firmware: PathBuf,
-
-    #[arg(default_value = "firmware_configured.bin")]
+    #[arg(default_value = "config.bin")]
     pub output: PathBuf,
 }
 
@@ -25,10 +26,12 @@ pub struct CreateCommand;
 
 impl CreateCommand {
     pub fn handle(args: CreateArgs) -> Result<(), Error> {
-        let config = DeviceConfig::write_file(&args.config, &args.firmware, &args.output)?;
+        let config = Config::read_json(&args.input)?;
+
+        config.write_file(&args.output)?;
 
         if args.verbose {
-            config.display();
+            config.print()?;
         }
 
         Ok(())

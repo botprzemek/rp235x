@@ -4,19 +4,22 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = { version = "1.0.104", optional = true }
-serde = { version = "1.0", features = ["derive", "alloc"] }
+# anyhow = { version = "1.0.104", optional = true }
+defmt = { version = "1.1.0", optional = true }
+serde = { version = "1.0", default-features = false }
 serde_json = { version = "1.0.151", optional = true }
 
 [dev-dependencies]
-anyhow = { version = "1.0.104" }
+# anyhow = { version = "1.0.104" }
 serde_json = { version = "1.0.151" }
 tempfile = { version = "3.27.0" }
 
 [features]
-default = ["std"]
+default = [ "std" ]
 std = [
-    "dep:anyhow",
+    # "dep:anyhow",
     "dep:serde_json",
-    "serde/std"
+    "serde/std",
+    "serde/derive"
 ]
+defmt = [ "dep:defmt" ]

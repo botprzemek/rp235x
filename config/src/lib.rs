@@ -1,386 +1,259 @@
 #![no_std]
 
-extern crate alloc;
-use alloc::string::{String, ToString};
-use alloc::vec;
-use core::{mem, slice};
-
 #[cfg(feature = "std")]
 extern crate std;
 
-#[cfg(feature = "std")]
-use std::format;
+pub mod file;
+pub mod print;
 
-#[cfg(feature = "std")]
-use std::fs;
+pub const CONFIG_SIZE: usize = core::mem::size_of::<Config>();
+pub const CONFIG_ADDR: usize = 0x1003F000;
 
-#[cfg(feature = "std")]
-use std::fs::File;
-
-#[cfg(feature = "std")]
-use std::io::{Read, Seek, SeekFrom, Write};
-
-#[cfg(feature = "std")]
-use std::path::PathBuf;
-
-#[cfg(feature = "std")]
-use std::println;
-
-#[cfg(feature = "std")]
-use anyhow::{Error, anyhow};
-
-#[cfg(feature = "std")]
-use serde::{Deserialize, Serialize};
-
-pub const CONFIG_OFFSET: u64 = 0x3F000;
-
-#[cfg(feature = "std")]
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ConfigInput {
-    pub serial_number: String,
-    pub device_id: String,
-    pub firmware_version: String,
-    pub wifi_ssid: String,
-    pub wifi_password: String,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConfigError {
+    FileNotFound,
+    InvalidEncoding,
+    IntegrityCheckFailed,
+    #[cfg(feature = "std")]
+    Io(std::io::ErrorKind),
+    Serialization,
+    StringTooLong,
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct DeviceConfig {
+#[cfg(feature = "std")]
+impl std::error::Error for ConfigError {}
+
+impl core::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::FileNotFound => write!(f, "File not found"),
+            Self::InvalidEncoding => write!(f, "String slice contains invalid UTF-8 sequence"),
+            Self::IntegrityCheckFailed => write!(f, "Memory checksum validation failed"),
+            #[cfg(feature = "std")]
+            Self::Io(error) => write!(f, "I/O Error: {}", error),
+            Self::Serialization => write!(f, "Serialization/Deserialization failed"),
+            Self::StringTooLong => write!(f, "Input string exceeds maximum buffer capacity"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<std::io::Error> for ConfigError {
+    fn from(error: std::io::Error) -> Self {
+        match error.kind() {
+            std::io::ErrorKind::NotFound => Self::FileNotFound,
+            _ => Self::Io(error.kind()),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub struct ConfigInput {
+    pub serial_number: std::string::String,
+    pub device_id: std::string::String,
+    pub wifi_ssid: std::string::String,
+    pub wifi_password: std::string::String,
+}
+
+#[repr(C, align(4))]
+#[derive(Debug, Clone)]
+pub struct Config {
     serial_number: [u8; 32],
     device_id: [u8; 32],
-    firmware_version: [u8; 16],
     wifi_ssid: [u8; 32],
     wifi_password: [u8; 64],
+    checksum: u32,
 }
 
-impl Default for DeviceConfig {
+impl Default for Config {
     fn default() -> Self {
         let mut config = Self {
             serial_number: [0; 32],
             device_id: [0; 32],
-            firmware_version: [0; 16],
             wifi_ssid: [0; 32],
             wifi_password: [0; 64],
+            checksum: 0,
         };
 
-        let _ = copy_to_array("sn-0000-0000", &mut config.serial_number);
-        let _ = copy_to_array("rp235x", &mut config.device_id);
-        let _ = copy_to_array("0.1.0", &mut config.firmware_version);
-        let _ = copy_to_array("my_ssid", &mut config.wifi_ssid);
-        let _ = copy_to_array("secret_password", &mut config.wifi_password);
+        let _ = Self::copy_to_array(b"sn-0000-0000", &mut config.serial_number);
+        let _ = Self::copy_to_array(b"rp235x", &mut config.device_id);
+        let _ = Self::copy_to_array(b"my_ssid", &mut config.wifi_ssid);
+        let _ = Self::copy_to_array(b"secret_password", &mut config.wifi_password);
 
+        config.update_checksum();
         config
     }
 }
 
-impl DeviceConfig {
+impl Drop for Config {
+    fn drop(&mut self) {
+        use core::sync::atomic::{Ordering, compiler_fence};
+
+        self.zeroize();
+
+        compiler_fence(Ordering::SeqCst);
+    }
+}
+
+impl Config {
     pub fn new(
         serial: &str,
         device: &str,
-        firmware: &str,
         ssid: &str,
         password: &str,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, ConfigError> {
         let mut config = Self {
             serial_number: [0; 32],
             device_id: [0; 32],
-            firmware_version: [0; 16],
             wifi_ssid: [0; 32],
             wifi_password: [0; 64],
+            checksum: 0,
         };
 
-        copy_to_array(serial, &mut config.serial_number)?;
-        copy_to_array(device, &mut config.device_id)?;
-        copy_to_array(firmware, &mut config.firmware_version)?;
-        copy_to_array(ssid, &mut config.wifi_ssid)?;
-        copy_to_array(password, &mut config.wifi_password)?;
+        if let Err(e) = Self::copy_to_array(serial.as_bytes(), &mut config.serial_number) {
+            config.zeroize();
+            return Err(e);
+        }
+        if let Err(e) = Self::copy_to_array(device.as_bytes(), &mut config.device_id) {
+            config.zeroize();
+            return Err(e);
+        }
+        if let Err(e) = Self::copy_to_array(ssid.as_bytes(), &mut config.wifi_ssid) {
+            config.zeroize();
+            return Err(e);
+        }
+        if let Err(e) = Self::copy_to_array(password.as_bytes(), &mut config.wifi_password) {
+            config.zeroize();
+            return Err(e);
+        }
 
+        config.update_checksum();
         Ok(config)
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts((self as *const Self) as *const u8, mem::size_of::<Self>()) }
+        use core::slice;
+
+        unsafe { slice::from_raw_parts((self as *const Self) as *const u8, CONFIG_SIZE) }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        if bytes.len() < mem::size_of::<Self>() {
-            return Err(anyhow!("TODO"));
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ConfigError> {
+        use core::ptr;
+
+        if bytes.len() < CONFIG_SIZE {
+            return Err(ConfigError::Serialization);
         }
 
-        let config = unsafe { core::ptr::read_unaligned(bytes.as_ptr() as *const Self) };
+        let mut config = Self::default();
+
+        unsafe {
+            ptr::copy_nonoverlapping(
+                bytes.as_ptr(),
+                &mut config as *mut Self as *mut u8,
+                CONFIG_SIZE,
+            );
+        }
+
+        if !config.verify_integrity() {
+            config.zeroize();
+            return Err(ConfigError::IntegrityCheckFailed);
+        }
 
         Ok(config)
     }
 
-    pub fn get_serial_number(&self) -> String {
-        String::from_utf8_lossy(&self.serial_number)
-            .trim_end_matches('\0')
-            .to_string()
+    pub fn get_serial_number(&self) -> Result<&str, ConfigError> {
+        Self::parse_str(&self.serial_number)
     }
 
-    pub fn get_device_id(&self) -> String {
-        String::from_utf8_lossy(&self.device_id)
-            .trim_end_matches('\0')
-            .to_string()
+    pub fn get_device_id(&self) -> Result<&str, ConfigError> {
+        Self::parse_str(&self.device_id)
     }
 
-    pub fn get_wifi_ssid(&self) -> String {
-        String::from_utf8_lossy(&self.wifi_ssid)
-            .trim_end_matches('\0')
-            .to_string()
+    pub fn get_wifi_ssid(&self) -> Result<&str, ConfigError> {
+        Self::parse_str(&self.wifi_ssid)
     }
 
-    pub fn get_wifi_password(&self) -> String {
-        String::from_utf8_lossy(&self.wifi_password)
-            .trim_end_matches('\0')
-            .to_string()
+    pub fn get_wifi_password(&self) -> Result<&str, ConfigError> {
+        Self::parse_str(&self.wifi_password)
     }
 
-    pub fn get_firmware_version(&self) -> String {
-        String::from_utf8_lossy(&self.firmware_version)
-            .trim_end_matches('\0')
-            .to_string()
+    pub fn read() -> Result<&'static Self, ConfigError> {
+        unsafe {
+            let ptr = CONFIG_ADDR as *const Config;
+            let config_ref = &*ptr;
+            if !config_ref.verify_integrity() {
+                return Err(ConfigError::IntegrityCheckFailed);
+            }
+
+            Ok(config_ref)
+        }
     }
 
-    #[cfg(feature = "std")]
-    pub fn read_file(file_path: &PathBuf) -> Result<Self, Error> {
-        let mut file = File::open(file_path)?;
-        file.seek(SeekFrom::Start(CONFIG_OFFSET))?;
+    #[inline(always)]
+    fn calculate_checksum(data: &[u8]) -> u32 {
+        let mut acc: u64 = 0x517cc1b727220a95;
 
-        let struct_size = mem::size_of::<DeviceConfig>();
-        let mut buffer = vec![0u8; struct_size];
-        file.read_exact(&mut buffer)?;
+        for &byte in data {
+            acc = acc.wrapping_mul(31).wrapping_add(byte as u64);
+        }
 
-        Self::from_bytes(&buffer)
+        (acc ^ (acc >> 32)) as u32
     }
 
-    #[cfg(feature = "std")]
-    pub fn write_file(
-        config_path: &PathBuf,
-        firmware_path: &PathBuf,
-        output_path: &PathBuf,
-    ) -> Result<Self, Error> {
-        let config = if !config_path.exists() {
-            DeviceConfig::default()
-        } else {
-            let content = fs::read_to_string(config_path)?;
-            let input: ConfigInput = serde_json::from_str(&content)?;
+    #[inline]
+    fn copy_to_array(src: &[u8], dest: &mut [u8]) -> Result<(), ConfigError> {
+        if src.len() >= dest.len() {
+            return Err(ConfigError::StringTooLong);
+        }
 
-            DeviceConfig::new(
-                &input.serial_number,
-                &input.device_id,
-                &input.firmware_version,
-                &input.wifi_ssid,
-                &input.wifi_password,
-            )
-            .map_err(|error| anyhow::anyhow!(error))?
-        };
+        dest.fill(0);
+        dest[..src.len()].copy_from_slice(src);
 
-        let mut file = if firmware_path.exists() {
-            fs::copy(firmware_path, output_path)?;
-
-            fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(output_path)?
-        } else {
-            File::create(output_path)?
-        };
-
-        file.seek(SeekFrom::Start(CONFIG_OFFSET))?;
-
-        file.write_all(config.as_bytes())
-            .map_err(|error| anyhow::anyhow!(error))?;
-
-        Ok(config)
+        Ok(())
     }
 
-    #[cfg(feature = "std")]
-    pub fn display(&self) {
-        let width = 42;
-
-        println!("┌{:─<width$}┐", "", width = width);
-        println!("│ {:^width$} │", "configuration", width = width - 2);
-        println!("├{:─<width$}┤", "", width = width);
-
-        println!(
-            "│ {:<width$} │",
-            format!("serial_number      {}", self.get_serial_number()),
-            width = width - 2
-        );
-        println!(
-            "│ {:<width$} │",
-            format!("device_id          {}", self.get_device_id()),
-            width = width - 2
-        );
-        println!(
-            "│ {:<width$} │",
-            format!("firmware_version   {}", self.get_firmware_version()),
-            width = width - 2
-        );
-        println!(
-            "│ {:<width$} │",
-            format!("wifi_ssid          {}", self.get_wifi_ssid()),
-            width = width - 2
-        );
-        println!(
-            "│ {:<width$} │",
-            format!("wifi_password      {}", self.get_wifi_password()),
-            width = width - 2
-        );
-
-        println!("├{:─<width$}┤", "", width = width);
-
-        println!(
-            "│ {:<width$} │",
-            format!("offset             0x{:X}", CONFIG_OFFSET),
-            width = width - 2
-        );
-
-        println!("└{:─<width$}┘", "", width = width);
-    }
-}
-
-fn copy_to_array(s: &str, dest: &mut [u8]) -> Result<(), &'static str> {
-    let bytes = s.as_bytes();
-    if bytes.len() >= dest.len() {
-        return Err("");
-    }
-    dest[..bytes.len()].copy_from_slice(bytes);
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_config() {
-        let config = DeviceConfig::new(
-            "sn-9999-9999",
-            "custom_device",
-            "1.2.3",
-            "network",
-            "secret_password",
-        )
-        .expect("Failed to create config");
-
-        assert_eq!(config.get_serial_number(), "sn-9999-9999");
-        assert_eq!(config.get_device_id(), "custom_device");
-        assert_eq!(config.get_firmware_version(), "1.2.3");
-        assert_eq!(config.get_wifi_ssid(), "network");
-        assert_eq!(config.get_wifi_password(), "secret_password");
+    #[inline]
+    fn parse_str(bytes: &[u8]) -> Result<&str, ConfigError> {
+        let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+        core::str::from_utf8(&bytes[..len]).map_err(|_| ConfigError::InvalidEncoding)
     }
 
-    #[test]
-    fn test_byte_conversion() {
-        let config = DeviceConfig::new(
-            "sn-9999-9999",
-            "custom_device",
-            "1.2.3",
-            "network",
-            "secret_password",
-        )
-        .expect("Failed to create config");
+    fn update_checksum(&mut self) {
+        let slice_len = CONFIG_SIZE - core::mem::size_of::<u32>();
+        let ptr = (self as *const Self) as *const u8;
+        let data = unsafe { core::slice::from_raw_parts(ptr, slice_len) };
 
-        let bytes = config.as_bytes();
-        let deserialized = DeviceConfig::from_bytes(bytes).expect("Failed to deserialize");
-
-        assert_eq!(config.get_serial_number(), deserialized.get_serial_number());
-        assert_eq!(config.get_device_id(), deserialized.get_device_id());
-        assert_eq!(
-            config.get_firmware_version(),
-            deserialized.get_firmware_version()
-        );
-        assert_eq!(config.get_wifi_ssid(), deserialized.get_wifi_ssid());
-        assert_eq!(config.get_wifi_password(), deserialized.get_wifi_password());
+        self.checksum = Self::calculate_checksum(data);
     }
 
-    #[test]
-    fn test_from_bytes_too_short() {
-        let short_buffer = vec![0u8; 10];
-        let result = DeviceConfig::from_bytes(&short_buffer);
-        assert!(result.is_err());
+    pub fn verify_integrity(&self) -> bool {
+        let slice_len = CONFIG_SIZE - core::mem::size_of::<u32>();
+        let ptr = (self as *const Self) as *const u8;
+        let data = unsafe { core::slice::from_raw_parts(ptr, slice_len) };
+
+        let computed = Self::calculate_checksum(data);
+
+        let mut diff = computed ^ self.checksum;
+        diff |= diff >> 16;
+        diff |= diff >> 8;
+        diff |= diff >> 4;
+        diff |= diff >> 2;
+        diff |= diff >> 1;
+
+        (diff & 1) == 0
     }
 
-    #[test]
-    fn test_all_fields_too_long() {
-        let too_long = "a".repeat(100);
+    fn zeroize(&mut self) {
+        use core::sync::atomic::{Ordering, compiler_fence};
 
-        assert!(DeviceConfig::new(&too_long, "dev", "1.0", "ssid", "pass").is_err());
-        assert!(DeviceConfig::new("sn", &too_long, "1.0", "ssid", "pass").is_err());
-        assert!(DeviceConfig::new("sn", "dev", &too_long, "ssid", "pass").is_err());
-        assert!(DeviceConfig::new("sn", "dev", "1.0", &too_long, "pass").is_err());
-        assert!(DeviceConfig::new("sn", "dev", "1.0", "ssid", &too_long).is_err());
-    }
+        self.serial_number.fill(0);
+        self.device_id.fill(0);
+        self.wifi_ssid.fill(0);
+        self.wifi_password.fill(0);
+        self.checksum = 0;
 
-    #[test]
-    fn test_write_file() {
-        let dir = tempfile::tempdir().expect("Failed to create temp dir");
-
-        let config_path = dir.path().join("config.json");
-        let firmware_path = dir.path().join("firmware.bin");
-        let output_path = dir.path().join("output.bin");
-
-        let config = DeviceConfig::write_file(&config_path, &firmware_path, &output_path)
-            .expect("Failed to write default config without firmware");
-        let default = DeviceConfig::default();
-
-        assert_eq!(config.get_serial_number(), default.get_serial_number());
-        assert_eq!(config.get_device_id(), default.get_device_id());
-        assert_eq!(
-            config.get_firmware_version(),
-            default.get_firmware_version()
-        );
-        assert_eq!(config.get_wifi_ssid(), default.get_wifi_ssid());
-        assert_eq!(config.get_wifi_password(), default.get_wifi_password());
-
-        let json_data = r#"{
-                "serial_number": "sn-9999-9999",
-                "device_id": "custom_device",
-                "firmware_version": "1.2.3",
-                "wifi_ssid": "network",
-                "wifi_password": "secret_password"
-            }"#;
-        let mut json_file = File::create(&config_path).unwrap();
-        json_file.write_all(json_data.as_bytes()).unwrap();
-
-        let mut fw_file = File::create(&firmware_path).unwrap();
-        fw_file.write_all(&vec![0xFF; 500000]).unwrap();
-
-        let custom = DeviceConfig::write_file(&config_path, &firmware_path, &output_path)
-            .expect("Failed to write custom config with firmware");
-
-        assert_eq!(custom.get_serial_number(), "sn-9999-9999");
-        assert_eq!(custom.get_device_id(), "custom_device");
-        assert_eq!(custom.get_firmware_version(), "2.0.0");
-        assert_eq!(custom.get_wifi_ssid(), "network");
-        assert_eq!(custom.get_wifi_password(), "secret_password");
-    }
-
-    #[test]
-    fn test_read_file() {
-        let dir = tempfile::tempdir().expect("Failed to create temp dir");
-
-        let config_path = dir.path().join("config.json");
-        let firmware_path = dir.path().join("firmware.bin");
-        let output_path = dir.path().join("output.bin");
-
-        DeviceConfig::write_file(&config_path, &firmware_path, &output_path)
-            .expect("Failed to prepare output file for reading");
-
-        let config =
-            DeviceConfig::read_file(&output_path).expect("Failed to read config from binary file");
-        let default = DeviceConfig::default();
-
-        assert_eq!(config.get_serial_number(), default.get_serial_number());
-        assert_eq!(config.get_device_id(), default.get_device_id());
-        assert_eq!(
-            config.get_firmware_version(),
-            default.get_firmware_version()
-        );
-        assert_eq!(config.get_wifi_ssid(), default.get_wifi_ssid());
-        assert_eq!(config.get_wifi_password(), default.get_wifi_password());
+        compiler_fence(Ordering::SeqCst);
     }
 }

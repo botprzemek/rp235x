@@ -23,6 +23,7 @@ doctest = false
 bench = false
 
 [dependencies]
+config ={ path = "../config", features = ["defmt"], default-features = false }
 game = { path = "../game", features = ["defmt"] }
 game-net = { path = "../game-net", features = ["defmt"] }
 
