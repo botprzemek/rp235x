@@ -1,14 +1,17 @@
 #![no_std]
 #![no_main]
 
+mod channels;
 mod core0;
 mod core1;
-mod entries;
+mod handler;
 mod interrupts;
 mod peripherals;
+mod state;
 
+use core0::Core0;
+use core1::Core1;
 use embassy_rp::multicore::{Stack, spawn_core1};
-use entries::{Core0, Core1};
 use {defmt_rtt as _, panic_probe as _};
 
 pub static mut CORE1_STACK: Stack<16384> = Stack::new();

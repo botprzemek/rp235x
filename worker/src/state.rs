@@ -1,7 +1,8 @@
+use defmt::Format;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ControllerInput {
+pub enum Input {
     None,
     BootSuccess,
     BootFailed,
@@ -12,8 +13,8 @@ pub enum ControllerInput {
     RecoverySuccess,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, defmt::Format)]
-pub enum ControllerState {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Format)]
+pub enum State {
     Boot,
     CoreSync,
     Networking,
@@ -21,45 +22,46 @@ pub enum ControllerState {
     ErrorRecovery,
 }
 
-pub struct ControllerStateMachine {
-    state: ControllerState,
+pub struct Machine {
+    state: State,
 }
 
-pub static CORE1_READY_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
-pub static STATE_SIGNAL: Signal<CriticalSectionRawMutex, ControllerState> = Signal::new();
+pub static STATE_SIGNAL: Signal<CriticalSectionRawMutex, State> = Signal::new();
 
-impl ControllerStateMachine {
+impl Machine {
     pub const fn new() -> Self {
-        Self {
-            state: ControllerState::Boot,
-        }
+        Self { state: State::Boot }
     }
 
-    pub fn current_state(&self) -> ControllerState {
+    pub fn current_state(&self) -> State {
         self.state
     }
 
-    pub fn process_event(&mut self, input: ControllerInput) {
+    pub fn transition(&mut self, input: Input) {
+        let old_state = self.current_state();
+        self.process(input);
+        let new_state = self.current_state();
+
+        if old_state != new_state {
+            STATE_SIGNAL.signal(new_state);
+        }
+    }
+
+    fn process(&mut self, input: Input) {
         self.state = match (self.state, input) {
-            (ControllerState::Boot, ControllerInput::BootSuccess) => ControllerState::CoreSync,
+            (State::Boot, Input::BootSuccess) => State::CoreSync,
 
-            (ControllerState::Boot, ControllerInput::BootFailed) => ControllerState::ErrorRecovery,
+            (State::Boot, Input::BootFailed) => State::ErrorRecovery,
 
-            (ControllerState::CoreSync, ControllerInput::CoreSynced) => ControllerState::Networking,
+            (State::CoreSync, Input::CoreSynced) => State::Networking,
 
-            (ControllerState::Networking, ControllerInput::WifiConnected) => {
-                ControllerState::Running
-            }
+            (State::Networking, Input::WifiConnected) => State::Running,
 
-            (ControllerState::Networking, ControllerInput::WifiFailed) => {
-                ControllerState::ErrorRecovery
-            }
+            (State::Networking, Input::WifiFailed) => State::ErrorRecovery,
 
-            (_, ControllerInput::ErrorOccurred) => ControllerState::ErrorRecovery,
+            (_, Input::ErrorOccurred) => State::ErrorRecovery,
 
-            (ControllerState::ErrorRecovery, ControllerInput::RecoverySuccess) => {
-                ControllerState::Boot
-            }
+            (State::ErrorRecovery, Input::RecoverySuccess) => State::Boot,
 
             _ => self.state,
         };

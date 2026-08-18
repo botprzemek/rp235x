@@ -1,4 +1,4 @@
-use crate::{Config, ConfigError};
+use crate::{Config, ConfigError, DeviceConfig, NetworkConfig};
 
 pub trait Print {
     fn print(&self) -> Result<(), ConfigError>;

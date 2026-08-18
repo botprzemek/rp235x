@@ -66,6 +66,16 @@ pub struct Config {
     checksum: u32,
 }
 
+pub trait DeviceConfig {
+    fn get_serial_number(&self) -> Result<&str, ConfigError>;
+    fn get_device_id(&self) -> Result<&str, ConfigError>;
+}
+
+pub trait NetworkConfig {
+    fn get_wifi_ssid(&self) -> Result<&str, ConfigError>;
+    fn get_wifi_password(&self) -> Result<&str, ConfigError>;
+}
+
 impl Default for Config {
     fn default() -> Self {
         let mut config = Self {
@@ -93,6 +103,26 @@ impl Drop for Config {
         self.zeroize();
 
         compiler_fence(Ordering::SeqCst);
+    }
+}
+
+impl DeviceConfig for Config {
+    fn get_serial_number(&self) -> Result<&str, ConfigError> {
+        Self::parse_str(&self.serial_number)
+    }
+
+    fn get_device_id(&self) -> Result<&str, ConfigError> {
+        Self::parse_str(&self.device_id)
+    }
+}
+
+impl NetworkConfig for Config {
+    fn get_wifi_ssid(&self) -> Result<&str, ConfigError> {
+        Self::parse_str(&self.wifi_ssid)
+    }
+
+    fn get_wifi_password(&self) -> Result<&str, ConfigError> {
+        Self::parse_str(&self.wifi_password)
     }
 }
 
@@ -138,31 +168,6 @@ impl Config {
         unsafe { slice::from_raw_parts((self as *const Self) as *const u8, CONFIG_SIZE) }
     }
 
-    // pub fn from_bytes1(bytes: &[u8]) -> Result<Self, ConfigError> {
-    //     use core::ptr;
-
-    //     if bytes.len() < CONFIG_SIZE {
-    //         return Err(ConfigError::Serialization);
-    //     }
-
-    //     let mut config = Self::default();
-
-    //     unsafe {
-    //         ptr::copy_nonoverlapping(
-    //             bytes.as_ptr(),
-    //             &mut config as *mut Self as *mut u8,
-    //             CONFIG_SIZE,
-    //         );
-    //     }
-
-    //     if !config.verify_integrity() {
-    //         config.zeroize();
-    //         return Err(ConfigError::IntegrityCheckFailed);
-    //     }
-
-    //     Ok(config)
-    // }
-
     pub fn from_bytes(bytes: &[u8]) -> Result<&Self, ConfigError> {
         if bytes.len() < CONFIG_SIZE {
             return Err(ConfigError::Serialization);
@@ -181,34 +186,6 @@ impl Config {
 
         Ok(config_ref)
     }
-
-    pub fn get_serial_number(&self) -> Result<&str, ConfigError> {
-        Self::parse_str(&self.serial_number)
-    }
-
-    pub fn get_device_id(&self) -> Result<&str, ConfigError> {
-        Self::parse_str(&self.device_id)
-    }
-
-    pub fn get_wifi_ssid(&self) -> Result<&str, ConfigError> {
-        Self::parse_str(&self.wifi_ssid)
-    }
-
-    pub fn get_wifi_password(&self) -> Result<&str, ConfigError> {
-        Self::parse_str(&self.wifi_password)
-    }
-
-    // pub fn read1() -> Result<&'static Self, ConfigError> {
-    //     unsafe {
-    //         let ptr = CONFIG_ADDR as *const Config;
-    //         let config_ref = &*ptr;
-    //         if !config_ref.verify_integrity() {
-    //             return Err(ConfigError::IntegrityCheckFailed);
-    //         }
-
-    //         Ok(config_ref)
-    //     }
-    // }
 
     pub fn read() -> Result<&'static Self, ConfigError> {
         unsafe {

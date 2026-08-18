@@ -1,6 +1,8 @@
 use crate::interrupts::Irqs;
-use cyw43::{Control, JoinOptions, NetDriver, SpiBus, State};
-use cyw43_pio::PioSpi;
+use crate::peripherals::NetPeripherals;
+
+use cyw43::{A4, Aligned, Control, NetDriver, SpiBus, State, new};
+use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use embassy_rp::{
     dma::Channel,
     gpio::{Level, Output},
@@ -9,58 +11,76 @@ use embassy_rp::{
 };
 use static_cell::StaticCell;
 
-use crate::peripherals::NetPeripherals;
-
-static FW_ADDR: usize = 0x10200000;
-static FW_LEN: usize = 231077;
-
-static NVRAM_ADDR: usize = 0x10250000;
-static NVRAM_LEN: usize = 742;
-
-static CLM_ADDR: usize = 0x10240000;
-static CLM_LEN: usize = 984;
-
-static WIFI_STATE: StaticCell<State> = StaticCell::new();
-
 type Runner<'a> = cyw43::Runner<'a, SpiBus<Output<'a>, PioSpi<'a, peripherals::PIO0, 0>>>;
 
-struct Cyw43;
+pub struct Cyw43;
+
+const FW_MASK: usize = 0x5A5A5A5A;
+const FW_ADDR: usize = 0x10200000 ^ FW_MASK;
+const FW_LEN: usize = 231077;
+
+const NVRAM_MASK: usize = 0x5A5A5A5A;
+const NVRAM_ADDR: usize = 0x10250000 ^ NVRAM_MASK;
+const NVRAM_LEN: usize = 742;
+
+static WIFI_STATE: StaticCell<State> = StaticCell::new();
 
 impl Cyw43 {
     pub async fn init(
         peripherals: NetPeripherals,
     ) -> (NetDriver<'static>, Control<'static>, Runner<'static>) {
         let state = WIFI_STATE.init(State::new());
+
         let pwr = Output::new(peripherals.pwr, Level::High);
         let cs = Output::new(peripherals.cs, Level::High);
         let mut pio = Pio::new(peripherals.pio, Irqs);
-        let dma_channel = Channel::new(peripherals.dma, Irqs);
+        let dma = Channel::new(peripherals.dma, Irqs);
+
         let spi = PioSpi::new(
             &mut pio.common,
             pio.sm0,
-            cyw43_pio::DEFAULT_CLOCK_DIVIDER,
+            DEFAULT_CLOCK_DIVIDER,
             pio.irq0,
             cs,
             peripherals.dio,
             peripherals.clk,
-            dma_channel,
+            dma,
         );
 
-        let fw_ptr = core::hint::black_box(FW_ADDR as *const u8);
-        let firmware_slice: &[u8] = unsafe { core::slice::from_raw_parts(fw_ptr, FW_LEN) };
-        let firmware_aligned: &cyw43::Aligned<cyw43::A4, [u8]> =
-            unsafe { core::mem::transmute(firmware_slice) };
+        let firmware = Self::load_firmware();
+        let nvram = Self::load_nvram();
 
-        let nvram_ptr = core::hint::black_box(NVRAM_ADDR as *const u8);
-        let nvram_slice: &[u8] = unsafe { core::slice::from_raw_parts(nvram_ptr, NVRAM_LEN) };
-        let nvram_aligned: &cyw43::Aligned<cyw43::A4, [u8]> =
-            unsafe { core::mem::transmute(nvram_slice) };
+        new(state, pwr, spi, firmware, nvram).await
+    }
 
-        cyw43::new(state, pwr, spi, firmware_aligned, nvram_aligned).await
+    #[inline(always)]
+    fn load_firmware() -> &'static Aligned<A4, [u8; FW_LEN]> {
+        let address = FW_ADDR ^ FW_MASK;
+
+        assert!(
+            address.is_multiple_of(core::mem::align_of::<Aligned<A4, [u8; FW_LEN]>>()),
+            "Memory alignment violation detected at hardware boundary."
+        );
+
+        let ptr = core::hint::black_box(address as *const Aligned<A4, [u8; FW_LEN]>);
+        unsafe { &*ptr }
+    }
+
+    #[inline(always)]
+    fn load_nvram() -> &'static Aligned<A4, [u8; NVRAM_LEN]> {
+        let address = NVRAM_ADDR ^ NVRAM_MASK;
+
+        assert!(
+            address.is_multiple_of(core::mem::align_of::<Aligned<A4, [u8; NVRAM_LEN]>>()),
+            "Memory alignment violation detected at hardware boundary."
+        );
+
+        let ptr = core::hint::black_box(address as *const Aligned<A4, [u8; NVRAM_LEN]>);
+        unsafe { &*ptr }
     }
 }
 
 #[embassy_executor::task]
-pub async fn task(runner: Runner<'static>) -> ! {
+pub async fn cyw43_task(runner: Runner<'static>) -> ! {
     runner.run().await
 }
