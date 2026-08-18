@@ -2,8 +2,8 @@ mod display;
 mod font;
 mod led;
 
-use crate::channels::GAME_CHANNEL;
 use crate::peripherals::LedPeripherals;
+use crate::{channels::GAME_CHANNEL, handler::CORE1_READY_SIGNAL};
 use defmt::unwrap;
 use embassy_executor::{Executor, Spawner};
 use embassy_rp::gpio::Level;
@@ -53,6 +53,8 @@ async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
     let mut row2_str = heapless::String::<16>::new();
 
     let started = embassy_time::Instant::now();
+
+    CORE1_READY_SIGNAL.signal(());
 
     loop {
         if let Ok(packet) = GAME_CHANNEL.try_receive()

@@ -4,7 +4,7 @@ use crate::core0::{
 };
 use crate::peripherals::{NetPeripherals, TrngPeripherals};
 use crate::state::{Input, Machine};
-use config::Config;
+use config::{Config, print::Print};
 use defmt::unwrap;
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
@@ -25,11 +25,14 @@ pub trait Handler {
 
 impl Handler for Machine {
     async fn handle_boot(&mut self) {
+        Config::read().unwrap().print().unwrap();
+
         self.transition(Input::BootSuccess);
     }
 
     async fn handle_sync(&mut self) {
         CORE1_READY_SIGNAL.wait().await;
+
         self.transition(Input::CoreSynced);
     }
 
@@ -52,7 +55,18 @@ impl Handler for Machine {
         stack.wait_config_up().await;
 
         match stack.config_v4() {
-            Some(_) => self.transition(Input::WifiConnected),
+            Some(config_v4) => {
+                defmt::info!(
+                    "NetworkConfig::Address               {}",
+                    &config_v4.address
+                );
+                defmt::info!(
+                    "NetworkConfig::Gateway               {}",
+                    &config_v4.gateway.unwrap()
+                );
+
+                self.transition(Input::WifiConnected);
+            }
             None => self.transition(Input::WifiFailed),
         }
     }

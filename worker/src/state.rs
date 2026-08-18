@@ -1,7 +1,7 @@
 use defmt::Format;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Format)]
 pub enum Input {
     None,
     BootSuccess,
@@ -48,6 +48,8 @@ impl Machine {
     }
 
     fn process(&mut self, input: Input) {
+        defmt::debug!("Input::{}", &input);
+
         self.state = match (self.state, input) {
             (State::Boot, Input::BootSuccess) => State::CoreSync,
 

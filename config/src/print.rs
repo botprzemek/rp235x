@@ -1,4 +1,4 @@
-use crate::{Config, ConfigError, DeviceConfig, NetworkConfig};
+use crate::{Config, ConfigError, DeviceConfig};
 
 pub trait Print {
     fn print(&self) -> Result<(), ConfigError>;
@@ -7,18 +7,21 @@ pub trait Print {
 impl Print for Config {
     #[cfg(feature = "defmt")]
     fn print(&self) -> Result<(), ConfigError> {
-        use defmt::info;
-
-        info!("serial_number:      {}", self.get_serial_number()?);
-        info!("device_id:          {}", self.get_device_id()?);
-        info!("wifi_ssid:          {}", self.get_wifi_ssid()?);
-        info!("wifi_password:      {}", self.get_wifi_password()?);
+        defmt::info!(
+            "DeviceConfig::SerialNumber           {}",
+            &self.get_serial_number()?
+        );
+        defmt::info!(
+            "DeviceConfig::DeviceID               {}",
+            &self.get_device_id()?
+        );
 
         Ok(())
     }
 
     #[cfg(feature = "std")]
     fn print(&self) -> Result<(), ConfigError> {
+        use crate::NetworkConfig;
         use std::{format, println};
         let width = 42;
 
