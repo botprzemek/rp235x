@@ -20,12 +20,20 @@ pub trait Handler {
         net: NetPeripherals,
         trng: TrngPeripherals,
     ) -> ();
-    async fn handle_rest(&mut self) -> ();
+    async fn handle_running(&mut self) -> ();
+    async fn handle_error_recovery(&mut self) -> ();
 }
 
 impl Handler for Machine {
     async fn handle_boot(&mut self) {
-        Config::read().unwrap().print().unwrap();
+        let config = match Config::read() {
+            Ok(config) => config,
+            Err(_) => return self.transition(Input::BootFailed),
+        };
+
+        if config.print().is_err() {
+            return self.transition(Input::BootFailed);
+        }
 
         self.transition(Input::BootSuccess);
     }
@@ -71,7 +79,11 @@ impl Handler for Machine {
         }
     }
 
-    async fn handle_rest(&mut self) {
+    async fn handle_running(&mut self) {
+        embassy_time::Timer::after_secs(1).await;
+    }
+
+    async fn handle_error_recovery(&mut self) {
         embassy_time::Timer::after_secs(1).await;
     }
 }

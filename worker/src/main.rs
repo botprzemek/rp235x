@@ -1,10 +1,8 @@
 #![no_std]
 #![no_main]
 
-mod channels;
 mod core0;
 mod core1;
-mod handler;
 mod interrupts;
 mod peripherals;
 mod state;

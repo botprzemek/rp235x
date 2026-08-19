@@ -1,5 +1,9 @@
 #[cfg(feature = "std")]
-use crate::{CONFIG_SIZE, Config, ConfigError, ConfigInput};
+use crate::{Config, ConfigError};
+
+#[cfg(feature = "std")]
+#[cfg(feature = "serde")]
+use crate::{CONFIG_SIZE, ConfigInput};
 
 #[cfg(feature = "std")]
 use std::path::Path;
@@ -17,6 +21,7 @@ pub trait FileWriter {
 }
 
 #[cfg(feature = "std")]
+#[cfg(feature = "serde")]
 impl FileReader for Config {
     fn read_json(path: &Path) -> Result<Self, ConfigError> {
         if !path.exists() {

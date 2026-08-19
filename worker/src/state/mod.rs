@@ -1,25 +1,29 @@
+pub mod handler;
+
 use defmt::Format;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Format)]
+#[repr(u8)]
+#[derive(Clone, PartialEq, Eq, Format)]
 pub enum Input {
-    None,
-    BootSuccess,
-    BootFailed,
-    CoreSynced,
-    WifiConnected,
-    WifiFailed,
-    ErrorOccurred,
-    RecoverySuccess,
+    None = 0x00,
+    BootSuccess = 0x10,
+    BootFailed = 0x11,
+    CoreSynced = 0x20,
+    WifiConnected = 0x30,
+    WifiFailed = 0x31,
+    ErrorOccurred = 0x90,
+    RecoverySuccess = 0x80,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Format)]
 pub enum State {
-    Boot,
-    CoreSync,
-    Networking,
-    Running,
-    ErrorRecovery,
+    Boot = 0x01,
+    CoreSync = 0x02,
+    Networking = 0x03,
+    Running = 0x04,
+    ErrorRecovery = 0x05,
 }
 
 pub struct Machine {

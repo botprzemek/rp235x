@@ -5,11 +5,11 @@ use static_cell::StaticCell;
 
 pub struct Net;
 
+static SOCKETS: StaticCell<StackResources<5>> = StaticCell::new();
+
 const CLM_MASK: usize = 0x5A5A5A5A;
 const CLM_ADDR: usize = 0x10240000 ^ CLM_MASK;
 const CLM_LEN: usize = 984;
-
-static SOCKETS: StaticCell<StackResources<5>> = StaticCell::new();
 
 impl Net {
     pub async fn init_stack(

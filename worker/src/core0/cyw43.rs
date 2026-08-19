@@ -15,6 +15,8 @@ type Runner<'a> = cyw43::Runner<'a, SpiBus<Output<'a>, PioSpi<'a, peripherals::P
 
 pub struct Cyw43;
 
+static WIFI_STATE: StaticCell<State> = StaticCell::new();
+
 const FW_MASK: usize = 0x5A5A5A5A;
 const FW_ADDR: usize = 0x10200000 ^ FW_MASK;
 const FW_LEN: usize = 231077;
@@ -22,8 +24,6 @@ const FW_LEN: usize = 231077;
 const NVRAM_MASK: usize = 0x5A5A5A5A;
 const NVRAM_ADDR: usize = 0x10250000 ^ NVRAM_MASK;
 const NVRAM_LEN: usize = 742;
-
-static WIFI_STATE: StaticCell<State> = StaticCell::new();
 
 impl Cyw43 {
     pub async fn init(

@@ -48,7 +48,9 @@ impl From<std::io::Error> for ConfigError {
 }
 
 #[cfg(feature = "std")]
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[derive(Debug)]
 pub struct ConfigInput {
     pub serial_number: std::string::String,
     pub device_id: std::string::String,
