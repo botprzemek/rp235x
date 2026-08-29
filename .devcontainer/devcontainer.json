@@ -5,14 +5,10 @@
     "features": {
         "ghcr.io/devcontainers/features/rust:1": {},
     },
-    "postStartCommand": "git config --global sequence.editor \"code --wait\" && rustup target add thumbv8m.main-none-eabihf && cargo install probe-rs-tools flip-link --locked && cargo build --bin blinky --release",
+    "postStartCommand": "git config --global sequence.editor \"code --wait\" && rustup target add thumbv8m.main-none-eabihf && rustup component add llvm-tools && cargo install --locked flip-link cargo-binutils trunk",
     "remoteUser": "vscode",
     "mounts": [
         "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached",
-        "source=/dev,target=/dev,type=bind",
-    ],
-    "runArgs": [
-        "--privileged",
     ],
     "customizations": {
         "vscode": {
@@ -21,6 +17,7 @@
                 "dustypomerleau.rust-syntax",
                 "esbenp.prettier-vscode",
                 "fill-labs.dependi",
+                "ms-vscode.vscode-serial-monitor",
                 "littensy.charmed-icons",
                 "rust-lang.rust-analyzer",
                 "tamasfe.even-better-toml",
@@ -84,7 +81,8 @@
                 "terminal.integrated.wordWrap": "off",
 
                 "chat.agent.enabled": false,
-                "chat.agentsControl.enabled": false,
+                "editor.inlineSuggest.enabled": false,
+                "chat.agentsControl.enabled": "hidden",
                 "chat.checkpoints.enabled": false,
                 "chat.extensionTools.enabled": false,
                 "chat.tips.enabled": false,

@@ -1,0 +1,22 @@
+[package]
+name = "config"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+defmt = { version = "1.1.0", features = [], optional = true }
+serde = { version = "1.0.228", features = [], optional = true }
+serde_json = { version = "1.0.151", features = [], optional = true }
+
+[dev-dependencies]
+tempfile = { version = "3.27.0" }
+
+[features]
+default = [ "std" ]
+std = []
+serde = [
+    "dep:serde_json",
+    "serde/std",
+    "serde/derive"
+]
+defmt = [ "dep:defmt" ]

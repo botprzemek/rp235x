@@ -1,0 +1,14 @@
+[package]
+name = "configurator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+config = { path = "../config", features = ["std", "serde"] }
+
+anyhow = { version = "1.0.104" }
+clap = { version = "4.4", features = ["derive"] }
+probe-rs = { version = "0.32.0" }
+
+[dev-dependencies]
+tempfile = { version = "3.27.0" }

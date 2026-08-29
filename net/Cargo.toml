@@ -1,0 +1,20 @@
+[package]
+name = "net"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+game = { path = "../game", features = [] }
+defmt = { version = "1.1.0", features = [], optional = true }
+serde = { version = "1.0.228", features = [], optional = true }
+
+[features]
+default = ["server"]
+client = []
+server = []
+serde = [
+    "dep:serde",
+    "serde/derive",
+    "game/serde",
+]
+defmt = ["dep:defmt"]
