@@ -40,18 +40,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "game"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "net"
 version = "0.1.0"
 dependencies = [
  "defmt",
- "game",
  "serde",
 ]
 

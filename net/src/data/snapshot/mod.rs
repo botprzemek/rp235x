@@ -1,4 +1,4 @@
-#![no_std]
+use core::time::Duration;
 
 pub mod layout;
 
@@ -11,7 +11,7 @@ pub enum State {
     Running = 0x01,
     Paused = 0x02,
     QuarterEnd = 0x03,
-    GameEnd = 0x04,
+    SnapshotEnd = 0x04,
 }
 
 #[repr(u8)]
@@ -39,7 +39,7 @@ pub enum Quarter {
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Game {
+pub struct Snapshot {
     pub state: State,
     pub discipline: Discipline,
     pub quarter: Quarter,
@@ -59,7 +59,7 @@ impl TryFrom<u8> for State {
             0x01 => Ok(State::Running),
             0x02 => Ok(State::Paused),
             0x03 => Ok(State::QuarterEnd),
-            0x04 => Ok(State::GameEnd),
+            0x04 => Ok(State::SnapshotEnd),
             _ => Err("state"),
         }
     }
@@ -90,7 +90,7 @@ impl TryFrom<u8> for Quarter {
     }
 }
 
-impl Game {
+impl Snapshot {
     pub fn new(discipline: Discipline) -> Self {
         let (quarter, regulation_millis, clock_millis) = Self::map_discipline(discipline);
 
@@ -142,23 +142,23 @@ impl Game {
 
         bytes
     }
-
-    pub fn from_payload(data: &[u8; layout::DATA_SIZE]) -> Result<Self, &'static str> {
+    pub fn from_bytes(buffer: &[u8; layout::DATA_SIZE]) -> Result<Self, &'static str> {
         let mut home_score = [0u8; 2];
         let mut away_score = [0u8; 2];
         let mut regulation_millis = [0u8; 4];
         let mut clock_millis = [0u8; 4];
 
-        home_score.copy_from_slice(&data[layout::HOME_SCORE_START..layout::HOME_SCORE_END]);
-        away_score.copy_from_slice(&data[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END]);
-        regulation_millis
-            .copy_from_slice(&data[layout::REGULATION_MILLIS_START..layout::REGULATION_MILLIS_END]);
-        clock_millis.copy_from_slice(&data[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]);
+        home_score.copy_from_slice(&buffer[layout::HOME_SCORE_START..layout::HOME_SCORE_END]);
+        away_score.copy_from_slice(&buffer[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END]);
+        regulation_millis.copy_from_slice(
+            &buffer[layout::REGULATION_MILLIS_START..layout::REGULATION_MILLIS_END],
+        );
+        clock_millis.copy_from_slice(&buffer[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]);
 
         Ok(Self {
-            state: State::try_from(data[layout::STATE])?,
-            discipline: Discipline::try_from(data[layout::DISCIPLINE])?,
-            quarter: Quarter::try_from(data[layout::QUARTER])?,
+            state: State::try_from(buffer[layout::STATE])?,
+            discipline: Discipline::try_from(buffer[layout::DISCIPLINE])?,
+            quarter: Quarter::try_from(buffer[layout::QUARTER])?,
 
             home_score: u16::from_be_bytes(home_score),
             away_score: u16::from_be_bytes(away_score),
@@ -169,13 +169,13 @@ impl Game {
         })
     }
 
-    pub fn tick(&mut self, tick_rate: u32) {
+    pub fn tick(&mut self, tick_rate: Duration) {
         match self.state {
             State::Idle => self.handle_idle(),
             State::Running => self.handle_running(tick_rate),
             State::Paused => self.handle_paused(),
             State::QuarterEnd => self.handle_quarter_end(),
-            State::GameEnd => self.handle_game_end(),
+            State::SnapshotEnd => self.handle_end(),
         }
     }
 
@@ -191,7 +191,7 @@ impl Game {
             Quarter::Q2 => Quarter::Q3,
             Quarter::Q3 => Quarter::Q4,
             _ => {
-                self.state = State::GameEnd;
+                self.state = State::SnapshotEnd;
                 return;
             }
         };
@@ -202,13 +202,15 @@ impl Game {
 
     fn handle_idle(&mut self) {}
 
-    fn handle_running(&mut self, tick_rate: u32) {
+    fn handle_running(&mut self, tick_rate: Duration) {
+        let tick_millis = tick_rate.as_millis() as u32;
+
         if self.regulation_millis == 0 {
             return self.next_quarter();
         };
 
-        if self.regulation_millis >= tick_rate {
-            self.regulation_millis -= tick_rate;
+        if self.regulation_millis >= tick_millis {
+            self.regulation_millis -= tick_millis;
         } else {
             self.regulation_millis = 0;
         }
@@ -218,7 +220,7 @@ impl Game {
 
     fn handle_quarter_end(&mut self) {}
 
-    fn handle_game_end(&mut self) {}
+    fn handle_end(&mut self) {}
 
     fn map_discipline(discipline: Discipline) -> (Quarter, u32, u32) {
         match discipline {

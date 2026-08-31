@@ -1,11 +1,10 @@
 mod display;
-mod font;
 mod led;
 
-use crate::peripherals::LedPeripherals;
 use crate::state::handler::CORE1_READY_SIGNAL;
+use crate::{peripherals::LedPeripherals, state::GAME_CHANNEL};
 use defmt::unwrap;
-use display::DisplayState;
+use display::Display;
 use embassy_executor::{Executor, Spawner};
 use led::LedOutputs;
 use static_cell::StaticCell;
@@ -20,15 +19,37 @@ impl Core1 {
 
         EXECUTOR.init(executor).run(|spawner| {
             spawner.spawn(unwrap!(task(spawner, led)));
+
+            CORE1_READY_SIGNAL.signal(());
         })
     }
 }
 
 #[embassy_executor::task]
 async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
-    CORE1_READY_SIGNAL.signal(());
+    let mut outputs = LedOutputs::from(peripherals);
+    let mut display = Display::new();
 
-    let mut _outputs = LedOutputs::from(peripherals);
+    let mut home_str = heapless::String::<8>::new();
+    let mut guest_str = heapless::String::<8>::new();
 
-    let _state = DisplayState::default();
+    let start_instant = embassy_time::Instant::now();
+
+    loop {
+        let game = GAME_CHANNEL.receive().await;
+
+        home_str.clear();
+        guest_str.clear();
+
+        let _ = core::fmt::write(&mut home_str, format_args!("{:03}", game.home_score));
+        let _ = core::fmt::write(&mut guest_str, format_args!("{:03}", game.away_score));
+
+        let elapsed_ms = start_instant.elapsed().as_millis();
+        let phase_hue = ((elapsed_ms % 10_000) * 360 / 10_000) as u16;
+
+        display.draw_animated_text(&home_str, &guest_str, phase_hue);
+        outputs.render_bcm_frame_sync(display.bitplanes());
+
+        embassy_futures::yield_now().await;
+    }
 }

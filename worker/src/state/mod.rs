@@ -1,7 +1,10 @@
 pub mod handler;
 
 use defmt::Format;
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
+use embassy_sync::{
+    blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel, signal::Signal,
+};
+use net::data::snapshot::Snapshot;
 
 #[repr(u8)]
 #[derive(Clone, PartialEq, Eq, Format)]
@@ -31,7 +34,7 @@ pub struct Machine {
 }
 
 pub static STATE_SIGNAL: Signal<CriticalSectionRawMutex, State> = Signal::new();
-
+pub static GAME_CHANNEL: Channel<CriticalSectionRawMutex, Snapshot, 4> = Channel::new();
 impl Machine {
     pub const fn new() -> Self {
         Self { state: State::Boot }

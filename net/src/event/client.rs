@@ -2,24 +2,29 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum Event {
+pub enum ClientEvent {
+    // --- Warstwa Systemowa / Worker ---
+    HandshakeRequest = 0x01,
+    Heartbeat = 0x02,
+
+    // --- Warstwa Sterowania (HMI / Panel WWW) ---
     Start = 0x40,
     Stop = 0x41,
-    Reset24 = 0x42,
-    Reset14 = 0x43,
-    SetTime = 0x44,
+    SetHomeScore = 0x42,
+    SetAwayScore = 0x43,
 }
 
-impl TryFrom<u8> for Event {
+impl TryFrom<u8> for ClientEvent {
     type Error = &'static str;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0x40 => Ok(Event::Start),
-            0x41 => Ok(Event::Stop),
-            0x42 => Ok(Event::Reset24),
-            0x43 => Ok(Event::Reset14),
-            0x44 => Ok(Event::SetTime),
-            _ => Err(""),
+            0x01 => Ok(ClientEvent::HandshakeRequest),
+            0x02 => Ok(ClientEvent::Heartbeat),
+            0x40 => Ok(ClientEvent::Start),
+            0x41 => Ok(ClientEvent::Stop),
+            0x42 => Ok(ClientEvent::SetHomeScore),
+            0x43 => Ok(ClientEvent::SetAwayScore),
+            _ => Err("Invalid ClientEvent"),
         }
     }
 }
