@@ -3,13 +3,17 @@
 #[cfg(feature = "std")]
 extern crate std;
 
+use core::fmt::{Display, Formatter};
+use core::sync::atomic::{Ordering, compiler_fence};
+
+#[cfg(feature = "std")]
 pub mod file;
 pub mod print;
 
 pub const CONFIG_SIZE: usize = core::mem::size_of::<Config>();
 pub const CONFIG_ADDR: usize = 0x1003F000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ConfigError {
     FileNotFound,
     InvalidEncoding,
@@ -23,8 +27,8 @@ pub enum ConfigError {
 #[cfg(feature = "std")]
 impl std::error::Error for ConfigError {}
 
-impl core::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+impl Display for ConfigError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::FileNotFound => write!(f, "File not found"),
             Self::InvalidEncoding => write!(f, "String slice contains invalid UTF-8 sequence"),
@@ -59,7 +63,7 @@ pub struct ConfigInput {
 }
 
 #[repr(C, align(4))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     serial_number: [u8; 32],
     device_id: [u8; 32],
@@ -252,8 +256,6 @@ impl Config {
     }
 
     fn zeroize(&mut self) {
-        use core::sync::atomic::{Ordering, compiler_fence};
-
         self.serial_number.fill(0);
         self.device_id.fill(0);
         self.wifi_ssid.fill(0);
@@ -261,5 +263,75 @@ impl Config {
         self.checksum = 0;
 
         compiler_fence(Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = Config::default();
+
+        assert!(config.verify_integrity());
+        assert_eq!(config.get_serial_number().unwrap(), "sn-0000-0000");
+        assert_eq!(config.get_device_id().unwrap(), "rp235x");
+        assert_eq!(config.get_wifi_ssid().unwrap(), "my_ssid");
+        assert_eq!(config.get_wifi_password().unwrap(), "secret_password");
+    }
+
+    #[test]
+    fn test_new_config() {
+        let config = Config::new("sn-0000-0001", "device", "other_ssid", "super_secret").unwrap();
+
+        assert!(config.verify_integrity());
+        assert_eq!(config.get_serial_number().unwrap(), "sn-0000-0001");
+        assert_eq!(config.get_device_id().unwrap(), "device");
+        assert_eq!(config.get_wifi_ssid().unwrap(), "other_ssid");
+        assert_eq!(config.get_wifi_password().unwrap(), "super_secret");
+    }
+
+    #[test]
+    fn test_string_too_long() {
+        let long_serial = "a".repeat(32);
+        let config = Config::new(&long_serial, "rp235x", "my_ssid", "secret_password");
+
+        assert_eq!(config, Err(ConfigError::StringTooLong));
+    }
+
+    #[test]
+    fn test_serialization_roundtrip() {
+        let config = Config::default();
+        let bytes = config.as_bytes();
+        let parsed = Config::from_bytes(bytes).unwrap();
+
+        assert!(parsed.verify_integrity());
+        assert_eq!(parsed.get_serial_number().unwrap(), "sn-0000-0000");
+        assert_eq!(parsed.get_device_id().unwrap(), "rp235x");
+        assert_eq!(parsed.get_wifi_ssid().unwrap(), "my_ssid");
+        assert_eq!(parsed.get_wifi_password().unwrap(), "secret_password");
+    }
+
+    #[test]
+    fn test_integrity_failure() {
+        let config = Config::default();
+        let bytes = config.as_bytes();
+
+        let mut bad_bytes = [0u8; CONFIG_SIZE];
+        bad_bytes.copy_from_slice(bytes);
+        bad_bytes[0] ^= 0xFF;
+
+        let config = Config::from_bytes(&bad_bytes);
+
+        assert_eq!(config, Err(ConfigError::IntegrityCheckFailed));
+    }
+
+    #[test]
+    fn test_buffer_too_short() {
+        let short_bytes = [0u8; 10];
+        let config = Config::from_bytes(&short_bytes);
+
+        assert_eq!(config, Err(ConfigError::Serialization));
     }
 }

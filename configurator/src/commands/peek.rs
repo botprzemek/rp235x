@@ -11,15 +11,13 @@ pub struct PeekCommand;
 
 impl PeekCommand {
     pub fn handle(_args: PeekArgs) -> Result<(), Error> {
-        let config = read_flash()?;
-
-        config.print()?;
+        read_flash()?;
 
         Ok(())
     }
 }
 
-fn read_flash() -> Result<Config, ConfigError> {
+fn read_flash() -> Result<(), ConfigError> {
     use probe_rs::MemoryInterface;
     use probe_rs::Permissions;
     use probe_rs::probe;
@@ -36,5 +34,7 @@ fn read_flash() -> Result<Config, ConfigError> {
     core.read_8(CONFIG_ADDR.try_into().unwrap(), &mut buffer)
         .unwrap();
 
-    Config::from_bytes(&buffer).cloned()
+    let config = Config::from_bytes(&buffer)?;
+
+    config.print()
 }

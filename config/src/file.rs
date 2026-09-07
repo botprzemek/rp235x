@@ -1,28 +1,26 @@
-#[cfg(feature = "std")]
 use crate::{Config, ConfigError};
 
-#[cfg(feature = "std")]
+use crate::CONFIG_SIZE;
 #[cfg(feature = "serde")]
-use crate::{CONFIG_SIZE, ConfigInput};
+use crate::ConfigInput;
 
-#[cfg(feature = "std")]
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
-#[cfg(feature = "std")]
 pub trait FileReader {
+    #[cfg(feature = "serde")]
     fn read_json(path: &Path) -> Result<Config, ConfigError>;
     fn read_bin(path: &Path) -> Result<Config, ConfigError>;
     fn read_file(path: &Path) -> Result<Config, ConfigError>;
 }
 
-#[cfg(feature = "std")]
 pub trait FileWriter {
     fn write_file(&self, path: &Path) -> Result<(), ConfigError>;
 }
 
-#[cfg(feature = "std")]
-#[cfg(feature = "serde")]
 impl FileReader for Config {
+    #[cfg(feature = "serde")]
     fn read_json(path: &Path) -> Result<Self, ConfigError> {
         if !path.exists() {
             return Err(ConfigError::FileNotFound);
@@ -41,9 +39,6 @@ impl FileReader for Config {
     }
 
     fn read_bin(path: &Path) -> Result<Self, ConfigError> {
-        use std::fs::File;
-        use std::io::Read;
-
         if !path.exists() {
             return Err(ConfigError::FileNotFound);
         }
@@ -52,7 +47,13 @@ impl FileReader for Config {
         let mut buffer = [0u8; CONFIG_SIZE];
         file.read_exact(&mut buffer)?;
 
-        Self::from_bytes(&buffer).cloned()
+        let ptr = buffer.as_ptr();
+        let config = unsafe { core::ptr::read_unaligned(ptr as *const Self) };
+        if !config.verify_integrity() {
+            return Err(ConfigError::IntegrityCheckFailed);
+        }
+
+        Ok(config)
     }
 
     fn read_file(path: &Path) -> Result<Self, ConfigError> {
@@ -62,6 +63,7 @@ impl FileReader for Config {
             .ok_or(ConfigError::Serialization)?;
 
         match extension {
+            #[cfg(feature = "serde")]
             "json" => Self::read_json(path),
             "bin" => Self::read_bin(path),
             _ => Ok(Self::default()),
@@ -69,7 +71,6 @@ impl FileReader for Config {
     }
 }
 
-#[cfg(feature = "std")]
 impl FileWriter for Config {
     fn write_file(&self, path: &Path) -> Result<(), ConfigError> {
         use std::fs::File;
