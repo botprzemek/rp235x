@@ -105,6 +105,18 @@ impl Snapshot {
         }
     }
 
+    pub const fn empty() -> Self {
+        Self {
+            state: State::Idle,
+            discipline: Discipline::FIBA5V5,
+            quarter: Quarter::Q1,
+            home_score: 0,
+            away_score: 0,
+            regulation_millis: 0,
+            clock_millis: 0,
+        }
+    }
+
     pub fn get_regulation_time(&self) -> (u8, u8, u8) {
         let total_secs = self.regulation_millis / 1000;
         let minutes = (total_secs / 60) as u8;

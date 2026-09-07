@@ -75,7 +75,7 @@ pub static IBM_FONT_7X9: [[u8; 9]; 10] = [
     // '9'
     [
         0b01111100, 0b11000110, 0b11000110, 0b11000110, 0b01111110, 0b00000110, 0b00000110,
-        0b01100110, 0b00111100,
+        0b11000110, 0b01111100,
     ],
 ];
 
@@ -118,7 +118,13 @@ impl Display {
         }
     }
 
-    pub fn draw_animated_text(&mut self, home_str: &str, guest_str: &str, phase_hue: u16) {
+    pub fn draw_animated_text(
+        &mut self,
+        home_str: &str,
+        guest_str: &str,
+        clock_str: &str,
+        phase_hue: u16,
+    ) {
         self.frame_buffer = [[[0, 0, 0]; 64]; 32];
 
         let block_width: i32 = 3 * 8;
@@ -128,12 +134,16 @@ impl Display {
         let r1_start_x: i32 = (64 - total_width) / 2;
         let r1_start_y: u32 = 0;
 
-        for y in 0..16 {
+        let clock_width: i32 = clock_str.len() as i32 * 8;
+        let r2_start_x: i32 = (64 - clock_width) / 2;
+        let r2_start_y: u32 = 23;
+
+        for y in 0..32 {
             for x in 0..64 {
+                let hue = (phase_hue + ((x as u32 * 67) / 64) as u16) % 360;
+                let color_at_x = self.hue_to_rgb(hue);
                 if y >= r1_start_y && y < r1_start_y + 9 && x >= r1_start_x {
                     let local_x = x - r1_start_x;
-                    let hue = (phase_hue + ((x as u32 * 67) / 64) as u16) % 360;
-                    let color_at_x = self.hue_to_rgb(hue);
 
                     if local_x < block_width {
                         let char_idx = (local_x / 8) as usize;
@@ -157,6 +167,27 @@ impl Display {
                             if c.is_ascii_digit() && get_ibm_pixel(c - b'0', pixel_x, pixel_y) {
                                 self.frame_buffer[y as usize][x as usize] = color_at_x;
                             }
+                        }
+                    }
+                }
+                if y >= r2_start_y && y < r2_start_y + 9 && x >= r2_start_x {
+                    let local_x = x - r2_start_x;
+                    let char_idx = (local_x / 8) as usize;
+                    let pixel_x = (local_x % 8) as u32;
+                    let pixel_y = y - r2_start_y;
+
+                    if char_idx < clock_str.len() && pixel_x < 7 {
+                        let c = clock_str.as_bytes()[char_idx];
+                        let pixel_on = if c == b':' {
+                            (3..=6).contains(&pixel_y) && (pixel_x == 2 || pixel_x == 3)
+                        } else if c.is_ascii_digit() {
+                            get_ibm_pixel(c - b'0', pixel_x, pixel_y)
+                        } else {
+                            false
+                        };
+
+                        if pixel_on {
+                            self.frame_buffer[y as usize][x as usize] = color_at_x;
                         }
                     }
                 }
