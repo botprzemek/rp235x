@@ -46,12 +46,12 @@ async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
         guest_str.clear();
         clock_str.clear();
 
-        let total_seconds = game.regulation_millis / 1000;
+        let total_seconds = game.regulation_millis() / 1000;
         let minutes = total_seconds / 60;
         let seconds = total_seconds % 60;
 
-        let _ = core::fmt::write(&mut home_str, format_args!("{:03}", game.home_score));
-        let _ = core::fmt::write(&mut guest_str, format_args!("{:03}", game.away_score));
+        let _ = core::fmt::write(&mut home_str, format_args!("{:03}", game.home_score()));
+        let _ = core::fmt::write(&mut guest_str, format_args!("{:03}", game.away_score()));
         let _ = core::fmt::write(
             &mut clock_str,
             format_args!("{:02}:{:02}", minutes, seconds),

@@ -149,14 +149,14 @@ pub async fn udp_task(stack: Stack<'static>) {
                 .await
             {
                 Ok(Ok((size, remote_endpoint))) => {
-                    if size == net::layout::PACKET_SIZE {
-                        if let Ok(_packet) = ServerPacket::from_bytes(&rx_packet_buf) {
-                            info!(
-                                "[WORKER] Znaleziono mastera pod adresem: {}. Handshake zakończony!",
-                                remote_endpoint
-                            );
-                            master_endpoint = Some(remote_endpoint.endpoint);
-                        }
+                    if size == net::layout::PACKET_SIZE
+                        && let Ok(_packet) = ServerPacket::from_bytes(&rx_packet_buf)
+                    {
+                        info!(
+                            "[WORKER] Znaleziono mastera pod adresem: {}. Handshake zakończony!",
+                            remote_endpoint
+                        );
+                        master_endpoint = Some(remote_endpoint.endpoint);
                     }
                 }
                 _ => {
@@ -197,7 +197,7 @@ pub async fn udp_task(stack: Stack<'static>) {
                                     Ok(packet) => {
                                         let game_ref = GAME_STATE.lock().await;
                                         *game_ref.borrow_mut() =
-                                            Snapshot::from_bytes(&packet.data).unwrap();
+                                            Snapshot::try_from(packet).unwrap();
                                     }
                                     Err(_) => {
                                         error!("crc_error");

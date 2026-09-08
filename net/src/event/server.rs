@@ -13,7 +13,7 @@ impl TryFrom<u8> for ServerEvent {
         match value {
             0x81 => Ok(ServerEvent::HandshakeAck),
             0xF0 => Ok(ServerEvent::Snapshot),
-            _ => Err("Invalid ServerEvent"),
+            _ => Err(""),
         }
     }
 }

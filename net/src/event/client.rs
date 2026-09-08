@@ -3,11 +3,9 @@
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ClientEvent {
-    // --- Warstwa Systemowa / Worker ---
     HandshakeRequest = 0x01,
     Heartbeat = 0x02,
 
-    // --- Warstwa Sterowania (HMI / Panel WWW) ---
     Start = 0x40,
     Stop = 0x41,
     SetHomeScore = 0x42,
@@ -24,7 +22,7 @@ impl TryFrom<u8> for ClientEvent {
             0x41 => Ok(ClientEvent::Stop),
             0x42 => Ok(ClientEvent::SetHomeScore),
             0x43 => Ok(ClientEvent::SetAwayScore),
-            _ => Err("Invalid ClientEvent"),
+            _ => Err(""),
         }
     }
 }

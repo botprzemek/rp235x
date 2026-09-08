@@ -28,11 +28,11 @@ impl CreateCommand {
     pub fn handle(args: CreateArgs) -> Result<(), Error> {
         let config = Config::read_json(&args.input)?;
 
-        config.write_file(&args.output)?;
-
         if args.verbose {
             config.print()?;
         }
+
+        config.write_file(&args.output)?;
 
         Ok(())
     }

@@ -6,6 +6,7 @@ use crate::ConfigInput;
 
 use std::fs::File;
 use std::io::Read;
+use std::io::Write;
 use std::path::Path;
 
 pub trait FileReader {
@@ -16,7 +17,7 @@ pub trait FileReader {
 }
 
 pub trait FileWriter {
-    fn write_file(&self, path: &Path) -> Result<(), ConfigError>;
+    fn write_file(self, path: &Path) -> Result<(), ConfigError>;
 }
 
 impl FileReader for Config {
@@ -72,13 +73,9 @@ impl FileReader for Config {
 }
 
 impl FileWriter for Config {
-    fn write_file(&self, path: &Path) -> Result<(), ConfigError> {
-        use std::fs::File;
-        use std::io::Write;
-
+    fn write_file(self, path: &Path) -> Result<(), ConfigError> {
         let mut file = File::create(path)?;
-        file.write_all(self.as_bytes())?;
-
-        Ok(())
+        file.write_all(self.as_bytes())
+            .map_err(|e| ConfigError::Io(e.kind()))
     }
 }

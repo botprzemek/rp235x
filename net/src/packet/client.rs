@@ -8,12 +8,12 @@ static PACKET_VERSION: u8 = 0x01;
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ClientPacket {
-    pub magic: u8,
-    pub event: ClientEvent,
-    pub sequence_id: u8,
-    pub version: u8,
-    pub data: [u8; layout::DATA_SIZE],
-    pub crc: u8,
+    magic: u8,
+    event: ClientEvent,
+    sequence_id: u8,
+    version: u8,
+    data: [u8; layout::DATA_SIZE],
+    crc: u8,
 }
 
 impl ClientPacket {
@@ -79,5 +79,9 @@ impl ClientPacket {
         }
 
         crc
+    }
+
+    pub fn event(&self) -> ClientEvent {
+        self.event
     }
 }

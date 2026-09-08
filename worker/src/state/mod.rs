@@ -3,10 +3,11 @@ pub mod handler;
 use core::cell::RefCell;
 use defmt::Format;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex, signal::Signal};
-use net::data::snapshot::{Discipline, Snapshot};
+use net::data::snapshot::Snapshot;
 
 #[repr(u8)]
 #[derive(Clone, PartialEq, Eq, Format)]
+#[allow(dead_code)]
 pub enum Input {
     None = 0x00,
     BootSuccess = 0x10,

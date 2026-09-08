@@ -1,11 +1,11 @@
-use core::time::Duration;
+use crate::ServerPacket;
 
 pub mod layout;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum State {
     Idle = 0x00,
     Running = 0x01,
@@ -16,8 +16,8 @@ pub enum State {
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Discipline {
     FIBA5V5 = 0x00,
     FIBA3X3 = 0x01,
@@ -25,8 +25,8 @@ pub enum Discipline {
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Quarter {
     None = 0x00,
     Q1 = 0x01,
@@ -37,18 +37,18 @@ pub enum Quarter {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Snapshot {
-    pub state: State,
-    pub discipline: Discipline,
-    pub quarter: Quarter,
+    state: State,
+    discipline: Discipline,
+    quarter: Quarter,
 
-    pub home_score: u16,
-    pub away_score: u16,
+    home_score: u16,
+    away_score: u16,
 
-    pub regulation_millis: u32,
-    pub clock_millis: u32,
+    regulation_millis: u32,
+    clock_millis: u32,
 }
 
 impl TryFrom<u8> for State {
@@ -90,9 +90,51 @@ impl TryFrom<u8> for Quarter {
     }
 }
 
+impl TryFrom<ServerPacket> for Snapshot {
+    type Error = &'static str;
+    fn try_from(value: ServerPacket) -> Result<Self, Self::Error> {
+        let mut home_score = [0u8; 2];
+        let mut away_score = [0u8; 2];
+        let mut regulation_millis = [0u8; 4];
+        let mut clock_millis = [0u8; 4];
+
+        home_score.copy_from_slice(&value.data()[layout::HOME_SCORE_START..layout::HOME_SCORE_END]);
+        away_score.copy_from_slice(&value.data()[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END]);
+        regulation_millis.copy_from_slice(
+            &value.data()[layout::REGULATION_MILLIS_START..layout::REGULATION_MILLIS_END],
+        );
+        clock_millis
+            .copy_from_slice(&value.data()[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]);
+
+        Ok(Self {
+            state: State::try_from(value.data()[layout::STATE])?,
+            discipline: Discipline::try_from(value.data()[layout::DISCIPLINE])?,
+            quarter: Quarter::try_from(value.data()[layout::QUARTER])?,
+
+            home_score: u16::from_be_bytes(home_score),
+            away_score: u16::from_be_bytes(away_score),
+
+            regulation_millis: u32::from_be_bytes(regulation_millis),
+
+            clock_millis: u32::from_be_bytes(clock_millis),
+        })
+    }
+}
+
+impl Discipline {
+    fn map(&self) -> (Quarter, u32, u32) {
+        match self {
+            Discipline::FIBA5V5 => (Quarter::Q1, 720000, 24000),
+            Discipline::FIBA3X3 => (Quarter::None, 600000, 24000),
+        }
+    }
+}
+
 impl Snapshot {
+    // pub fn new() -> Self {}
+    // pub fn empty() -> Self {}
     pub fn new(discipline: Discipline) -> Self {
-        let (quarter, regulation_millis, clock_millis) = Self::map_discipline(discipline);
+        let (quarter, regulation_millis, clock_millis) = discipline.map();
 
         Self {
             state: State::Idle,
@@ -154,34 +196,48 @@ impl Snapshot {
 
         bytes
     }
-    pub fn from_bytes(buffer: &[u8; layout::DATA_SIZE]) -> Result<Self, &'static str> {
-        let mut home_score = [0u8; 2];
-        let mut away_score = [0u8; 2];
-        let mut regulation_millis = [0u8; 4];
-        let mut clock_millis = [0u8; 4];
 
-        home_score.copy_from_slice(&buffer[layout::HOME_SCORE_START..layout::HOME_SCORE_END]);
-        away_score.copy_from_slice(&buffer[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END]);
-        regulation_millis.copy_from_slice(
-            &buffer[layout::REGULATION_MILLIS_START..layout::REGULATION_MILLIS_END],
-        );
-        clock_millis.copy_from_slice(&buffer[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]);
-
-        Ok(Self {
-            state: State::try_from(buffer[layout::STATE])?,
-            discipline: Discipline::try_from(buffer[layout::DISCIPLINE])?,
-            quarter: Quarter::try_from(buffer[layout::QUARTER])?,
-
-            home_score: u16::from_be_bytes(home_score),
-            away_score: u16::from_be_bytes(away_score),
-
-            regulation_millis: u32::from_be_bytes(regulation_millis),
-
-            clock_millis: u32::from_be_bytes(clock_millis),
-        })
+    pub fn state(&self) -> State {
+        self.state
     }
 
-    pub fn tick(&mut self, tick_rate: Duration) {
+    pub fn set_state(&mut self, state: State) {
+        self.state = state
+    }
+
+    pub fn discipline(&self) -> Discipline {
+        self.discipline
+    }
+
+    pub fn quarter(&self) -> Quarter {
+        self.quarter
+    }
+
+    pub fn home_score(&self) -> u16 {
+        self.home_score
+    }
+
+    pub fn set_home_score(&mut self, home_score: u16) {
+        self.home_score = home_score
+    }
+
+    pub fn away_score(&self) -> u16 {
+        self.away_score
+    }
+
+    pub fn set_away_score(&mut self, away_score: u16) {
+        self.away_score = away_score
+    }
+
+    pub fn regulation_millis(&self) -> u32 {
+        self.regulation_millis
+    }
+
+    pub fn clock_millis(&self) -> u32 {
+        self.clock_millis
+    }
+
+    pub fn tick(&mut self, tick_rate: core::time::Duration) {
         match self.state {
             State::Idle => self.handle_idle(),
             State::Running => self.handle_running(tick_rate),
@@ -208,13 +264,13 @@ impl Snapshot {
             }
         };
 
-        self.regulation_millis = Self::map_discipline(self.discipline).1;
-        self.clock_millis = Self::map_discipline(self.discipline).2;
+        self.regulation_millis = self.discipline.map().1;
+        self.clock_millis = self.discipline.map().2;
     }
 
     fn handle_idle(&mut self) {}
 
-    fn handle_running(&mut self, tick_rate: Duration) {
+    fn handle_running(&mut self, tick_rate: core::time::Duration) {
         let tick_millis = tick_rate.as_millis() as u32;
 
         if self.regulation_millis == 0 {
@@ -233,11 +289,4 @@ impl Snapshot {
     fn handle_quarter_end(&mut self) {}
 
     fn handle_end(&mut self) {}
-
-    fn map_discipline(discipline: Discipline) -> (Quarter, u32, u32) {
-        match discipline {
-            Discipline::FIBA5V5 => (Quarter::Q1, 720000, 24000),
-            Discipline::FIBA3X3 => (Quarter::None, 600000, 24000),
-        }
-    }
 }

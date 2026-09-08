@@ -226,7 +226,10 @@ impl Config {
 
     #[inline]
     fn parse_str(bytes: &[u8]) -> Result<&str, ConfigError> {
-        let len = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+        let len = bytes
+            .iter()
+            .position(|&b| b == 0)
+            .ok_or(ConfigError::Serialization)?;
         core::str::from_utf8(&bytes[..len]).map_err(|_| ConfigError::InvalidEncoding)
     }
 
