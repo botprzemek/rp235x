@@ -8,8 +8,8 @@ use crate::{
     state::GAME_STATE,
 };
 use config::{Config, print::Print};
-use defmt::unwrap;
 use defmt::{error, info};
+use defmt::{println, unwrap};
 use embassy_executor::Spawner;
 use embassy_net::{
     Stack,
@@ -118,100 +118,95 @@ pub async fn udp_task(stack: Stack<'static>) {
         return;
     }
 
-    // Adres rozgłoszeniowy (broadcast) w sieci lokalnej na port mastera
     let broadcast_endpoint =
         embassy_net::IpEndpoint::new(embassy_net::IpAddress::v4(255, 255, 255, 255), 8000);
 
     let mut rx_packet_buf = [0u8; net::layout::PACKET_SIZE];
 
-    // ==========================================
-    // ZEWNĘTRZNA PĘTLA CAŁEGO CYKLU POŁĄCZENIA
-    // ==========================================
     loop {
         info!("[WORKER] Szukanie mastera w sieci (Broadcast)...");
         let mut master_endpoint: Option<embassy_net::IpEndpoint> = None;
 
-        // ==========================================
-        // FAZA 1: HANDSHAKE (Odkrywanie przez Broadcast)
-        // ==========================================
         while master_endpoint.is_none() {
             let mocked_data = [0u8; 27];
-            let client_packet = ClientPacket::new(ClientEvent::Start, 0, mocked_data);
+            let client_packet = ClientPacket::new(ClientEvent::HandshakeRequest, 0, mocked_data);
             let packet_bytes = client_packet.to_bytes();
 
-            // Wysyłamy broadcast do całej sieci lokalnej
             if let Err(e) = socket.send_to(&packet_bytes, broadcast_endpoint).await {
                 error!("broadcast_send_error: {:?}", e);
             }
 
             let recv_future = socket.recv_from(&mut rx_packet_buf);
-            match embassy_time::with_timeout(embassy_time::Duration::from_millis(500), recv_future)
-                .await
+            let (size, remote_endpoint) = match embassy_time::with_timeout(
+                embassy_time::Duration::from_millis(500),
+                recv_future,
+            )
+            .await
             {
-                Ok(Ok((size, remote_endpoint))) => {
-                    if size == net::layout::PACKET_SIZE
-                        && let Ok(_packet) = ServerPacket::from_bytes(&rx_packet_buf)
-                    {
-                        info!(
-                            "[WORKER] Znaleziono mastera pod adresem: {}. Handshake zakończony!",
-                            remote_endpoint
-                        );
-                        master_endpoint = Some(remote_endpoint.endpoint);
-                    }
-                }
-                _ => {
-                    // Timeout – ponawiamy wysyłkę pakietu odkrywającego
+                Ok(Ok((size, remote_endpoint))) => (size, remote_endpoint),
+                Ok(Err(e)) => {
+                    info!("{}", e);
                     continue;
                 }
+                Err(e) => {
+                    info!("{}", e);
+                    continue;
+                }
+            };
+
+            if size != net::layout::PACKET_SIZE {
+                continue;
             }
+
+            let _packet = match ServerPacket::from_bytes(&rx_packet_buf) {
+                Ok(packet) => packet,
+                Err(_) => continue,
+            };
+
+            info!(
+                "[WORKER] Znaleziono mastera pod adresem: {}. Handshake zakończony!",
+                remote_endpoint
+            );
+            master_endpoint = Some(remote_endpoint.endpoint);
         }
 
         let master_endpoint = master_endpoint.unwrap();
         info!("[WORKER] Przejście do głównej pętli odbierania danych.");
 
-        // ==========================================
-        // FAZA 2: GŁÓWNA PĘTLA ODBIERANIA DANYCH + KEEPALIVE
-        // ==========================================
         let mut keepalive_timer = embassy_time::Ticker::every(embassy_time::Duration::from_secs(3));
         let mut missed_heartbeats: u8 = 0;
-        const MAX_MISSED_HEARTS: u8 = 3; // 3 * 3 sekundy = 9 sekund ciszy before disconnect
+        const MAX_MISSED_HEARTS: u8 = 3;
 
         loop {
             let recv_fut = socket.recv_from(&mut rx_packet_buf);
             let tick_fut = keepalive_timer.next();
 
             match embassy_futures::select::select(recv_fut, tick_fut).await {
-                embassy_futures::select::Either::First(res) => {
-                    // Otrzymano jakikolwiek pakiet z sieci
-                    match res {
-                        Ok((size, remote_endpoint)) => {
-                            if size != net::layout::PACKET_SIZE {
-                                continue;
-                            }
-
-                            if remote_endpoint.endpoint.addr == master_endpoint.addr {
-                                // Sukces! Otrzymaliśmy pakiet od naszego mastera – resetujemy licznik nieodebranych
-                                missed_heartbeats = 0;
-
-                                match ServerPacket::from_bytes(&rx_packet_buf) {
-                                    Ok(packet) => {
-                                        let game_ref = GAME_STATE.lock().await;
-                                        *game_ref.borrow_mut() =
-                                            Snapshot::try_from(packet).unwrap();
-                                    }
-                                    Err(_) => {
-                                        error!("crc_error");
-                                    }
-                                }
-                            }
+                embassy_futures::select::Either::First(res) => match res {
+                    Ok((size, remote_endpoint)) => {
+                        if size != net::layout::PACKET_SIZE {
+                            continue;
                         }
-                        Err(e) => {
-                            error!("udp_rx_error: {:?}", e);
+
+                        if remote_endpoint.endpoint.addr != master_endpoint.addr {
+                            continue;
                         }
+
+                        missed_heartbeats = 0;
+
+                        let packet = match ServerPacket::from_bytes(&rx_packet_buf) {
+                            Ok(packet) => packet,
+                            Err(_) => continue,
+                        };
+
+                        let game_ref = GAME_STATE.lock().await;
+                        *game_ref.borrow_mut() = Snapshot::try_from(packet).unwrap();
                     }
-                }
+                    Err(e) => {
+                        error!("udp_rx_error: {:?}", e);
+                    }
+                },
                 embassy_futures::select::Either::Second(_) => {
-                    // Minęły 3 sekundy – wysyłamy keepalive
                     let mocked_data = [0u8; 27];
                     let keepalive_packet = ClientPacket::new(ClientEvent::Start, 0, mocked_data);
                     let packet_bytes = keepalive_packet.to_bytes();
@@ -221,16 +216,14 @@ pub async fn udp_task(stack: Stack<'static>) {
                     } else {
                         info!("[WORKER] Wysłano keepalive do mastera");
 
-                        // Zwiększamy licznik braków odpowiedzi
                         missed_heartbeats += 1;
-                        if missed_heartbeats >= MAX_MISSED_HEARTS {
-                            info!(
-                                "[WORKER] Brak odpowiedzi od Mastera przez 9s! Utracono połączenie."
-                            );
-
-                            // Przerywamy wewnętrzną pętlę Fazy 2 -> kod wróci na początek głównej pętli (Faza 1)
-                            break;
+                        if missed_heartbeats < MAX_MISSED_HEARTS {
+                            continue;
                         }
+
+                        info!("[WORKER] Brak odpowiedzi od Mastera przez 9s! Utracono połączenie.");
+
+                        break;
                     }
                 }
             }

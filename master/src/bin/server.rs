@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,7 +13,7 @@ use futures::SinkExt;
 use futures::stream::StreamExt;
 use rust_embed::RustEmbed;
 use tokio::net::UdpSocket;
-use tokio::sync::{broadcast, watch};
+use tokio::sync::{Mutex, broadcast, watch};
 use tokio::time::{self, Instant};
 use tower_http::cors::CorsLayer;
 
@@ -101,8 +102,6 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             if response.is_err() {
                 break;
             }
-
-            continue;
         }
     });
 
@@ -111,8 +110,6 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
             if let Message::Close(_) = msg {
                 break;
             }
-
-            continue;
         }
     });
 
@@ -155,136 +152,96 @@ async fn api_match_state_handler(
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let rx_socket = Arc::new(UdpSocket::bind("0.0.0.0:8000").await?);
-    rx_socket.set_broadcast(true)?;
+    let udp_socket = Arc::new(UdpSocket::bind("0.0.0.0:8000").await?);
+    udp_socket.set_broadcast(true)?;
 
     let (state_tx, state_rx) = watch::channel(Snapshot::new(Discipline::FIBA5V5));
     let (tx, _rx) = broadcast::channel(100);
 
-    let actor_state_rx = state_rx.clone();
-    let actor_state_tx = state_tx.clone();
-    let actor_ws_tx = tx.clone();
+    // Wspólny stan adresu aktywnego workera UDP
+    let active_worker: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(None));
+
+    // Zadanie tle UDP: nasłuchiwanie przychodzących pakietów od workera (Non-blocking / odseparowane od ticku)
+    let rx_udp_socket = Arc::clone(&udp_socket);
+    let rx_worker_addr = Arc::clone(&active_worker);
+    let rx_state_rx = state_rx.clone();
 
     tokio::spawn(async move {
-        let mut interval = time::interval(FRAME_DURATION);
-        let mut last_score_update = Instant::now();
+        let mut sequence_id: u8 = 0;
+        let mut rx_buf = [0u8; net::layout::PACKET_SIZE];
 
         loop {
-            interval.tick().await;
+            let (size, remote_addr) = match rx_udp_socket.recv_from(&mut rx_buf).await {
+                Ok(res) => res,
+                Err(_) => continue,
+            };
 
-            let mut current_state = *actor_state_rx.borrow();
-
-            if current_state.state() == State::Running
-                && last_score_update.elapsed() >= Duration::from_secs(1)
-            {
-                last_score_update = Instant::now();
+            if size != net::layout::PACKET_SIZE {
+                continue;
             }
-            current_state.tick(FRAME_DURATION);
 
-            let _ = actor_state_tx.send(current_state);
-            if let Ok(json) = serde_json::to_string(&current_state) {
-                let _ = actor_ws_tx.send(json);
+            let packet_array = match rx_buf[..net::layout::PACKET_SIZE].try_into() {
+                Ok(arr) => arr,
+                Err(_) => continue,
+            };
+
+            let packet = match ClientPacket::from_bytes(&packet_array) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+
+            match packet.event() {
+                ClientEvent::HandshakeRequest | ClientEvent::Start | ClientEvent::Heartbeat => {
+                    let mut worker_lock = rx_worker_addr.lock().await;
+                    if worker_lock.is_none() || worker_lock.unwrap() != remote_addr {
+                        println!("[MASTER] Połączono z workerem UDP: {}", remote_addr);
+                    }
+                    *worker_lock = Some(remote_addr);
+
+                    sequence_id = sequence_id.wrapping_add(1);
+                    let data = *rx_state_rx.borrow();
+                    let ack_packet =
+                        ServerPacket::new(ServerEvent::HandshakeAck, sequence_id, data.to_bytes());
+                    let _ = rx_udp_socket
+                        .send_to(&ack_packet.to_bytes(), remote_addr)
+                        .await;
+                }
+                _ => {}
             }
         }
     });
 
-    let udp_socket = Arc::clone(&rx_socket);
-    let udp_state_rx = state_rx.clone();
-    let _udp_state_tx = state_tx.clone();
+    // Jedna główna pętla tickująca (Frame Ticker) dla stanu, WebSocket i UDP
+    let tick_state_rx = state_rx.clone();
+    let tick_state_tx = state_tx.clone();
+    let tick_ws_tx = tx.clone();
+    let tick_udp_socket = Arc::clone(&udp_socket);
+    let tick_worker_addr = Arc::clone(&active_worker);
 
     tokio::spawn(async move {
+        let mut interval = time::interval(FRAME_DURATION);
         let mut sequence_id: u8 = 0;
 
         loop {
-            let mut worker_addr = None;
+            interval.tick().await;
 
-            while worker_addr.is_none() {
-                let mut rx_buf = [0u8; net::layout::PACKET_SIZE];
-                let (size, remote_addr) = match udp_socket.recv_from(&mut rx_buf).await {
-                    Ok((size, remote_addr)) => (size, remote_addr),
-                    Err(_) => continue,
-                };
+            let mut current_state = *tick_state_rx.borrow();
+            current_state.tick(FRAME_DURATION);
 
-                if size != net::layout::PACKET_SIZE {
-                    continue;
-                }
+            let _ = tick_state_tx.send(current_state);
 
-                let packet_array = match rx_buf[..net::layout::PACKET_SIZE].try_into() {
-                    Ok(packet_array) => packet_array,
-                    Err(_) => continue,
-                };
-
-                let packet = match ClientPacket::from_bytes(&packet_array) {
-                    Ok(packet) => packet,
-                    Err(_) => continue,
-                };
-
-                match packet.event() {
-                    ClientEvent::HandshakeRequest | ClientEvent::Start | ClientEvent::Heartbeat => {
-                        worker_addr = Some(remote_addr);
-                        println!("[MASTER] Połączono z workerem UDP: {}", remote_addr);
-
-                        sequence_id = sequence_id.wrapping_add(1);
-                        let data = *udp_state_rx.borrow();
-                        let ack_packet = ServerPacket::new(
-                            ServerEvent::HandshakeAck,
-                            sequence_id,
-                            data.to_bytes(),
-                        );
-                        let _ = udp_socket
-                            .send_to(&ack_packet.to_bytes(), remote_addr)
-                            .await;
-                    }
-                    _ => (),
-                }
+            // 1. Wysyłanie do przeglądarek (WebSocket)
+            if let Ok(json) = serde_json::to_string(&current_state) {
+                let _ = tick_ws_tx.send(json);
             }
 
-            let worker_addr = worker_addr.unwrap();
-            let mut _last_packet_received = Instant::now();
-            let mut interval = time::interval(FRAME_DURATION);
-
-            loop {
-                let mut rx_buf = [0u8; net::layout::PACKET_SIZE];
-
+            // 2. Wysyłanie do workera (UDP) w tym samym cyklu ramki
+            let worker = *tick_worker_addr.lock().await;
+            if let Some(addr) = worker {
                 sequence_id = sequence_id.wrapping_add(1);
-                interval.tick().await;
-
-                let (size, remote_addr) = match tokio::time::timeout(
-                    Duration::from_millis(1),
-                    udp_socket.recv_from(&mut rx_buf),
-                )
-                .await
-                {
-                    Ok(Ok((size, remote_addr))) => (size, remote_addr),
-                    _ => continue,
-                };
-
-                if remote_addr == worker_addr {
-                    _last_packet_received = Instant::now();
-                }
-
-                if size != net::layout::PACKET_SIZE {
-                    continue;
-                }
-
-                let packet_array = match rx_buf[..net::layout::PACKET_SIZE].try_into() {
-                    Ok(packet_array) => packet_array,
-                    Err(_) => continue,
-                };
-
-                let packet = match ClientPacket::from_bytes(&packet_array) {
-                    Ok(packet) => packet,
-                    Err(_) => continue,
-                };
-
-                match packet.event() {
-                    ClientEvent::Heartbeat => _last_packet_received = Instant::now(),
-                    _ => continue,
-                }
-
-                let data = *udp_state_rx.borrow();
-                let packet = ServerPacket::new(ServerEvent::Snapshot, sequence_id, data.to_bytes());
-                let _ = udp_socket.send_to(&packet.to_bytes(), worker_addr).await;
+                let packet =
+                    ServerPacket::new(ServerEvent::Snapshot, sequence_id, current_state.to_bytes());
+                let _ = tick_udp_socket.send_to(&packet.to_bytes(), addr).await;
             }
         }
     });
@@ -301,10 +258,8 @@ async fn main() -> std::io::Result<()> {
         .with_state(app_state)
         .layer(CorsLayer::permissive());
 
-    println!("http://localhost:8080/");
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
-        .await
-        .unwrap();
+    println!("http://localhost:80/");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:80").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 
     Ok(())

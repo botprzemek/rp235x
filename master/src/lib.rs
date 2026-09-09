@@ -122,13 +122,13 @@ impl Component for ScoreboardComponent {
         let on_toggle_controls = ctx.link().callback(|_| Msg::ToggleControls);
 
         html! {
-            <div style="font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; text-align: center; margin: 0; padding: 30px; background: #f8fafc; color: #0f172a; display: flex; justify-content: center; flex-direction: column; align-items: center; gap: 20px;">
-                <main style="display: flex; width: 100%; max-width: 600px; flex-direction: column; border: 1px solid #cbd5e1; background-color: #f8fafc; overflow: hidden; text-align: left; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+            <div style="font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; margin: 0; padding: 12px; background: #f8fafc; color: #0f172a; display: flex; justify-content: center; flex-direction: column; align-items: center; gap: 16px; box-sizing: border-box; min-height: 100dvh; width: 100dvw; overflow-x: hidden;">
+                <main style="display: flex; width: 100%; max-width: 480px; flex-direction: column; border: 1px solid #cbd5e1; background-color: #f8fafc; overflow: hidden; text-align: left; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); box-sizing: border-box;">
                     <Navbar on_toggle_controls={on_toggle_controls} />
 
-                    <header style="margin: 24px 32px 12px 32px; display: flex; flex-direction: column; gap: 8px;">
-                        <h1 style="font-size: 24px; color: #0f172a; margin: 0; text-transform: lowercase; font-weight: 600;">{"tablica wyników"}</h1>
-                        <p style="font-size: 14px; color: #64748b; margin: 0;">{"zarządzaj stanem oraz punktacją meczu w czasie rzeczywistym"}</p>
+                    <header style="margin: 16px 16px 8px 16px; display: flex; flex-direction: column; gap: 4px;">
+                        <h1 style="font-size: 20px; color: #0f172a; margin: 0; text-transform: lowercase; font-weight: 600;">{"tablica wyników"}</h1>
+                        <p style="font-size: 13px; color: #64748b; margin: 0;">{"zarządzaj stanem oraz punktacją w czasie rzeczywistym"}</p>
                     </header>
 
                     <ScoreDisplay
@@ -140,7 +140,7 @@ impl Component for ScoreboardComponent {
                     />
                 </main>
 
-                <div id="controls-container" style={format!("width: 100%; max-width: 600px; display: {}; flex-direction: column; gap: 16px; transition: all 0.3s ease;", if self.controls_hidden { "none" } else { "flex" })}>
+                <div id="controls-container" style={format!("width: 100%; max-width: 480px; display: {}; flex-direction: column; gap: 12px; box-sizing: border-box;", if self.controls_hidden { "none" } else { "flex" })}>
                     <ScoreboardControls is_running={is_running} />
                 </div>
             </div>
