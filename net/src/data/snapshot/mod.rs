@@ -2,6 +2,15 @@ use crate::ServerPacket;
 
 pub mod layout;
 
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
+pub enum Team {
+    Home,
+    Away,
+}
+
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -55,12 +64,12 @@ impl TryFrom<u8> for State {
     type Error = &'static str;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0x00 => Ok(State::Idle),
-            0x01 => Ok(State::Running),
-            0x02 => Ok(State::Paused),
-            0x03 => Ok(State::QuarterEnd),
-            0x04 => Ok(State::SnapshotEnd),
-            _ => Err("state"),
+            0x00 => Ok(Self::Idle),
+            0x01 => Ok(Self::Running),
+            0x02 => Ok(Self::Paused),
+            0x03 => Ok(Self::QuarterEnd),
+            0x04 => Ok(Self::SnapshotEnd),
+            _ => Err(""),
         }
     }
 }
@@ -69,8 +78,8 @@ impl TryFrom<u8> for Discipline {
     type Error = &'static str;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0x00 => Ok(Discipline::FIBA5V5),
-            0x01 => Ok(Discipline::FIBA3X3),
+            0x00 => Ok(Self::FIBA5V5),
+            0x01 => Ok(Self::FIBA3X3),
             _ => Err(""),
         }
     }
@@ -80,11 +89,11 @@ impl TryFrom<u8> for Quarter {
     type Error = &'static str;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0x00 => Ok(Quarter::None),
-            0x01 => Ok(Quarter::Q1),
-            0x02 => Ok(Quarter::Q2),
-            0x03 => Ok(Quarter::Q3),
-            0x04 => Ok(Quarter::Q4),
+            0x00 => Ok(Self::None),
+            0x01 => Ok(Self::Q1),
+            0x02 => Ok(Self::Q2),
+            0x03 => Ok(Self::Q3),
+            0x04 => Ok(Self::Q4),
             _ => Err(""),
         }
     }
@@ -124,15 +133,13 @@ impl TryFrom<ServerPacket> for Snapshot {
 impl Discipline {
     fn map(&self) -> (Quarter, u32, u32) {
         match self {
-            Discipline::FIBA5V5 => (Quarter::Q1, 720000, 24000),
-            Discipline::FIBA3X3 => (Quarter::None, 600000, 24000),
+            Self::FIBA5V5 => (Quarter::Q1, 720000, 24000),
+            Self::FIBA3X3 => (Quarter::None, 600000, 24000),
         }
     }
 }
 
 impl Snapshot {
-    // pub fn new() -> Self {}
-    // pub fn empty() -> Self {}
     pub fn new(discipline: Discipline) -> Self {
         let (quarter, regulation_millis, clock_millis) = discipline.map();
 
@@ -235,6 +242,17 @@ impl Snapshot {
 
     pub fn clock_millis(&self) -> u32 {
         self.clock_millis
+    }
+
+    pub fn transition_to(&mut self, state: State) {
+        self.set_state(state);
+    }
+
+    pub fn make_field_goal(&mut self, team: Team, points: u16) {
+        match team {
+            Team::Home => self.set_home_score(self.home_score().saturating_add(points)),
+            Team::Away => self.set_away_score(self.away_score().saturating_add(points)),
+        }
     }
 
     pub fn tick(&mut self, tick_rate: core::time::Duration) {
