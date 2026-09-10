@@ -8,7 +8,11 @@ use core::sync::atomic::{Ordering, compiler_fence};
 
 #[cfg(feature = "std")]
 pub mod file;
+#[cfg(feature = "std")]
+pub use file::{FileReader, FileWriter};
+
 pub mod print;
+pub use print::Print;
 
 pub const CONFIG_SIZE: usize = core::mem::size_of::<Config>();
 pub const CONFIG_ADDR: usize = 0x1003F000;

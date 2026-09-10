@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+aes-gcm = { version = "0.11.1", features = [], optional = true }
 defmt = { version = "1.1.0", features = [], optional = true }
+ed25519-dalek = { version = "3.0.0", features = ["rand_core"], optional = true }
+rand = { version = "0.10.2", features = [], optional = true }
 serde = { version = "1.0.228", features = [], optional = true }
 serde_json = { version = "1.0.151", features = [], optional = true }
 
@@ -12,7 +15,12 @@ serde_json = { version = "1.0.151", features = [], optional = true }
 tempfile = { version = "3.27.0" }
 
 [features]
-default = [ "std" ]
+default = [
+    "std",
+    "dep:aes-gcm",
+    "dep:ed25519-dalek",
+    "dep:rand"
+]
 std = []
 serde = [
     "dep:serde_json",

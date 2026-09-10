@@ -11,13 +11,14 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use futures::SinkExt;
 use futures::stream::StreamExt;
+use redb::{Database, ReadableDatabase, TableDefinition};
 use rust_embed::RustEmbed;
-use tokio::net::UdpSocket;
+use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::{Mutex, broadcast, watch};
-use tokio::time::{self, Instant};
+use tokio::time::{self};
 use tower_http::cors::CorsLayer;
 
-use master::App;
+use hmi::App;
 use net::{
     ClientPacket, ServerPacket,
     data::snapshot::{Discipline, Snapshot, State, Team},
@@ -25,6 +26,7 @@ use net::{
 };
 
 const FRAME_DURATION: Duration = Duration::from_millis(64);
+const SNAPSHOT_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("snapshot_store");
 
 #[derive(serde::Deserialize)]
 struct ScoreRequest {
@@ -36,11 +38,32 @@ struct ScoreRequest {
 struct AppState {
     tx: broadcast::Sender<String>,
     state_tx: watch::Sender<Snapshot>,
+    db: Arc<Database>,
 }
 
 #[derive(RustEmbed)]
-#[folder = "dist/"]
+#[folder = "../hmi/dist/"]
 struct Assets;
+
+fn save_snapshot_to_db(db: &Database, snapshot: &Snapshot) {
+    if let Ok(tx) = db.begin_write() {
+        {
+            if let Ok(mut table) = tx.open_table(SNAPSHOT_TABLE) {
+                if let Ok(bytes) = bincode::serialize(snapshot) {
+                    let _ = table.insert("current", bytes.as_slice());
+                }
+            }
+        }
+        let _ = tx.commit();
+    }
+}
+
+fn load_snapshot_from_db(db: &Database) -> Option<Snapshot> {
+    let tx = db.begin_read().ok()?;
+    let table = tx.open_table(SNAPSHOT_TABLE).ok()?;
+    let bytes = table.get("current").ok()??;
+    bincode::deserialize(bytes.value()).ok()
+}
 
 async fn static_handler(uri: Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
@@ -126,6 +149,9 @@ async fn api_score_handler(
     state.state_tx.send_modify(|data| {
         data.make_field_goal(body.team, body.points);
     });
+    let current_state = *state.state_tx.borrow();
+    save_snapshot_to_db(&state.db, &current_state);
+
     let json = serde_json::to_string(&*state.state_tx.borrow()).unwrap_or_default();
     let _ = state.tx.send(json);
     axum::http::StatusCode::OK
@@ -145,6 +171,9 @@ async fn api_match_state_handler(
     state.state_tx.send_modify(|data| {
         data.set_state(new_state);
     });
+    let current_state = *state.state_tx.borrow();
+    save_snapshot_to_db(&state.db, &current_state);
+
     let json = serde_json::to_string(&*state.state_tx.borrow()).unwrap_or_default();
     let _ = state.tx.send(json);
     axum::http::StatusCode::OK
@@ -152,16 +181,34 @@ async fn api_match_state_handler(
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let udp_socket = Arc::new(UdpSocket::bind("0.0.0.0:8000").await?);
-    udp_socket.set_broadcast(true)?;
+    let db_path = std::path::Path::new("master_state.redb");
+    let db = Arc::new(
+        Database::create(db_path).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
+    );
 
-    let (state_tx, state_rx) = watch::channel(Snapshot::new(Discipline::FIBA5V5));
+    {
+        let write_tx = db
+            .begin_write()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let _ = write_tx
+            .open_table(SNAPSHOT_TABLE)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        write_tx
+            .commit()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    }
+
+    let initial_snapshot =
+        load_snapshot_from_db(&db).unwrap_or_else(|| Snapshot::new(Discipline::FIBA5V5));
+
+    let (state_tx, state_rx) = watch::channel(initial_snapshot);
     let (tx, _rx) = broadcast::channel(100);
 
-    // Wspólny stan adresu aktywnego workera UDP
     let active_worker: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(None));
 
-    // Zadanie tle UDP: nasłuchiwanie przychodzących pakietów od workera (Non-blocking / odseparowane od ticku)
+    let udp_socket = Arc::new(UdpSocket::bind("0.0.0.0:9000").await?);
+    udp_socket.set_broadcast(true)?;
+
     let rx_udp_socket = Arc::clone(&udp_socket);
     let rx_worker_addr = Arc::clone(&active_worker);
     let rx_state_rx = state_rx.clone();
@@ -211,7 +258,22 @@ async fn main() -> std::io::Result<()> {
         }
     });
 
-    // Jedna główna pętla tickująca (Frame Ticker) dla stanu, WebSocket i UDP
+    let ws_state = AppState {
+        tx: tx.clone(),
+        state_tx: state_tx.clone(),
+        db: Arc::clone(&db),
+    };
+    let ws_app = Router::new()
+        .route("/ws", get(ws_handler))
+        .with_state(ws_state)
+        .layer(CorsLayer::permissive());
+
+    tokio::spawn(async move {
+        println!("ws://localhost:9000/ws");
+        let listener = TcpListener::bind("0.0.0.0:9000").await.unwrap();
+        axum::serve(listener, ws_app).await.unwrap();
+    });
+
     let tick_state_rx = state_rx.clone();
     let tick_state_tx = state_tx.clone();
     let tick_ws_tx = tx.clone();
@@ -230,12 +292,10 @@ async fn main() -> std::io::Result<()> {
 
             let _ = tick_state_tx.send(current_state);
 
-            // 1. Wysyłanie do przeglądarek (WebSocket)
             if let Ok(json) = serde_json::to_string(&current_state) {
                 let _ = tick_ws_tx.send(json);
             }
 
-            // 2. Wysyłanie do workera (UDP) w tym samym cyklu ramki
             let worker = *tick_worker_addr.lock().await;
             if let Some(addr) = worker {
                 sequence_id = sequence_id.wrapping_add(1);
@@ -246,21 +306,23 @@ async fn main() -> std::io::Result<()> {
         }
     });
 
-    let app_state = AppState { tx, state_tx };
-
-    let app = Router::new()
+    let http_state = AppState {
+        tx: tx.clone(),
+        state_tx: state_tx.clone(),
+        db: Arc::clone(&db),
+    };
+    let http_app = Router::new()
         .route("/", get(render_handler))
-        .route("/ws", get(ws_handler))
         .route("/api/score", post(api_score_handler))
         .route("/api/start", post(api_match_state_handler))
         .route("/api/stop", post(api_match_state_handler))
         .fallback(static_handler)
-        .with_state(app_state)
+        .with_state(http_state)
         .layer(CorsLayer::permissive());
 
     println!("http://localhost:80/");
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:80").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let http_listener = TcpListener::bind("0.0.0.0:80").await.unwrap();
+    axum::serve(http_listener, http_app).await.unwrap();
 
     Ok(())
 }

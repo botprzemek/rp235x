@@ -9,6 +9,7 @@ config = { path = "../config", features = ["std", "serde"] }
 anyhow = { version = "1.0.104" }
 clap = { version = "4.4", features = ["derive"] }
 probe-rs = { version = "0.32.0" }
+hex = { version = "0.4.3" }
 
 [dev-dependencies]
 tempfile = { version = "3.27.0" }

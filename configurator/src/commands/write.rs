@@ -11,7 +11,7 @@ pub struct WriteArgs {
     #[arg(short, long)]
     pub verbose: bool,
 
-    #[arg(default_value = "config.json")]
+    #[arg(default_value = "config.bin")]
     pub file: PathBuf,
 }
 
@@ -19,7 +19,7 @@ pub struct WriteCommand;
 
 impl WriteCommand {
     pub fn handle(args: WriteArgs) -> Result<(), Error> {
-        let config = Config::read_file(&args.file)?;
+        let config = Config::read_bin(&args.file)?;
 
         write_flash(&config)?;
 
