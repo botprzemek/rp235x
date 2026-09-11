@@ -3,15 +3,21 @@
 #[cfg(feature = "std")]
 extern crate std;
 
-use core::fmt::{Display, Formatter};
-use core::sync::atomic::{Ordering, compiler_fence};
-
 #[cfg(feature = "std")]
 pub mod file;
+pub mod flash;
 #[cfg(feature = "std")]
-pub use file::{FileReader, FileWriter};
-
+pub mod keys;
 pub mod print;
+
+use core::fmt;
+use core::sync::atomic::{Ordering, compiler_fence};
+#[cfg(feature = "serde")]
+pub use file::JsonReader;
+#[cfg(feature = "std")]
+pub use file::{BinReader, BinWriter};
+#[cfg(feature = "std")]
+pub use keys::{KeyError, Keys, SecureKey};
 pub use print::Print;
 
 pub const CONFIG_SIZE: usize = core::mem::size_of::<Config>();
@@ -31,8 +37,8 @@ pub enum ConfigError {
 #[cfg(feature = "std")]
 impl std::error::Error for ConfigError {}
 
-impl Display for ConfigError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::FileNotFound => write!(f, "File not found"),
             Self::InvalidEncoding => write!(f, "String slice contains invalid UTF-8 sequence"),
@@ -195,14 +201,6 @@ impl Config {
         }
 
         Ok(config_ref)
-    }
-
-    pub fn read() -> Result<&'static Self, ConfigError> {
-        unsafe {
-            let bytes = core::slice::from_raw_parts(CONFIG_ADDR as *const u8, CONFIG_SIZE);
-
-            Self::from_bytes(bytes)
-        }
     }
 
     #[inline(always)]

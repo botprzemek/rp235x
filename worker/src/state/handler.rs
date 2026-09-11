@@ -7,9 +7,10 @@ use crate::{
     },
     state::GAME_STATE,
 };
+use config::flash::FlashReader;
 use config::{Config, print::Print};
+use defmt::unwrap;
 use defmt::{error, info};
-use defmt::{println, unwrap};
 use embassy_executor::Spawner;
 use embassy_net::{
     Stack,

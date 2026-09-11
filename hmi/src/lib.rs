@@ -62,15 +62,9 @@ impl Component for ScoreboardComponent {
         }
         let link = ctx.link().clone();
         let window = web_sys::window().unwrap();
-        let hostname = match window.location().hostname() {
-            Ok(hostname) => hostname,
-            Err(e) => {
-                println!("error: {:?}", e);
-                "localhost".into()
-            }
-        };
+        let hostname = window.location().hostname().unwrap_or("localhost".into());
 
-        let ws_url = format!("ws://{}:9000/ws", &hostname);
+        let ws_url = format!("ws://{}:9000/ws", hostname);
 
         spawn_local(async move {
             loop {

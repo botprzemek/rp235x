@@ -46,16 +46,26 @@ struct AppState {
 struct Assets;
 
 fn save_snapshot_to_db(db: &Database, snapshot: &Snapshot) {
-    if let Ok(tx) = db.begin_write() {
-        {
-            if let Ok(mut table) = tx.open_table(SNAPSHOT_TABLE) {
-                if let Ok(bytes) = bincode::serialize(snapshot) {
-                    let _ = table.insert("current", bytes.as_slice());
-                }
-            }
-        }
-        let _ = tx.commit();
-    }
+    let bytes = match bincode::serialize(snapshot) {
+        Ok(bytes) => bytes,
+        Err(_) => return,
+    };
+
+    let tx = match db.begin_write() {
+        Ok(tx) => tx,
+        Err(_) => return,
+    };
+
+    let mut table = match tx.open_table(SNAPSHOT_TABLE) {
+        Ok(table) => table,
+        Err(_) => return,
+    };
+
+    let _ = table.insert("current", bytes.as_slice());
+
+    drop(table);
+
+    let _ = tx.commit();
 }
 
 fn load_snapshot_from_db(db: &Database) -> Option<Snapshot> {

@@ -1,15 +1,13 @@
 mod commands;
 
-use commands::Commands;
-
 use clap::Parser;
 
-const COMMAND_NAME: &str = "configurator";
-const COMMAND_ABOUT: &str = "TODO";
+use commands::Commands;
 
 #[derive(Parser)]
-#[command(name = COMMAND_NAME)]
-#[command(about = COMMAND_ABOUT, long_about = None)]
+#[command(name = "configurator")]
+#[command(about = "TODO")]
+#[command(long_about = "TODO")]
 pub struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -17,10 +15,12 @@ pub struct Cli {
 
 impl Cli {
     pub fn run(self) {
-        match self.command.run() {
-            Ok(()) => (),
-            Err(error) => println!("Error: {}", error),
-        }
+        let error = match self.command.run() {
+            Ok(()) => return,
+            Err(error) => error,
+        };
+
+        println!("Error: {}", error);
     }
 }
 

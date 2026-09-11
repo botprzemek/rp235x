@@ -5,9 +5,12 @@ edition = "2024"
 
 [dependencies]
 aes-gcm = { version = "0.11.1", features = [], optional = true }
+crc32fast = { version = "1.5.1", features = [], optional = true }
 defmt = { version = "1.1.0", features = [], optional = true }
 ed25519-dalek = { version = "3.0.0", features = ["rand_core"], optional = true }
 rand = { version = "0.10.2", features = [], optional = true }
+probe-rs = { version = "0.32.0", features = [], optional = true }
+libc = { version = "0.2.189", features = [], optional = true }
 serde = { version = "1.0.228", features = [], optional = true }
 serde_json = { version = "1.0.151", features = [], optional = true }
 
@@ -16,12 +19,16 @@ tempfile = { version = "3.27.0" }
 
 [features]
 default = [
-    "std",
-    "dep:aes-gcm",
-    "dep:ed25519-dalek",
-    "dep:rand"
+    "std"
 ]
-std = []
+std = [
+    "dep:aes-gcm",
+    "dep:crc32fast",
+    "dep:ed25519-dalek",
+    "dep:rand",
+    "dep:probe-rs",
+    "dep:libc"
+]
 serde = [
     "dep:serde_json",
     "serde/std",
