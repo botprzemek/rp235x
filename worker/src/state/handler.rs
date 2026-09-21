@@ -120,7 +120,7 @@ pub async fn udp_task(stack: Stack<'static>) {
     }
 
     let broadcast_endpoint =
-        embassy_net::IpEndpoint::new(embassy_net::IpAddress::v4(255, 255, 255, 255), 8000);
+        embassy_net::IpEndpoint::new(embassy_net::IpAddress::v4(255, 255, 255, 255), 9000);
 
     let mut rx_packet_buf = [0u8; net::layout::PACKET_SIZE];
 

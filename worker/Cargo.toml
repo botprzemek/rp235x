@@ -1,5 +1,5 @@
 [package]
-name = "rp235x"
+name = "worker"
 version = "0.1.0"
 edition = "2024"
 
@@ -15,7 +15,7 @@ incremental = false
 codegen-units = 1
 
 [[bin]]
-name = "rp235x"
+name = "worker"
 path = "src/main.rs"
 test = false
 doctest = false
@@ -23,6 +23,7 @@ bench = false
 
 [dependencies]
 config = { path = "../config", features = ["defmt"], default-features = false }
+hub75 = { path = "../hub75", features = [] }
 net = { path = "../net", features = ["defmt"] }
 
 embassy-embedded-hal = { version = "0.6.0", features = ["defmt"] }

@@ -192,20 +192,14 @@ async fn api_match_state_handler(
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let db_path = std::path::Path::new("master_state.redb");
-    let db = Arc::new(
-        Database::create(db_path).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
-    );
+    let db = Arc::new(Database::create(db_path).map_err(std::io::Error::other)?);
 
     {
-        let write_tx = db
-            .begin_write()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let write_tx = db.begin_write().map_err(std::io::Error::other)?;
         let _ = write_tx
             .open_table(SNAPSHOT_TABLE)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        write_tx
-            .commit()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
+        write_tx.commit().map_err(std::io::Error::other)?;
     }
 
     let initial_snapshot =

@@ -1,0 +1,14 @@
+[package]
+name = "hub75"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cortex-m = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt =  { version = "0.7.0", features = [] }
+defmt = { version = "1.1.0", features = [] }
+defmt-rtt = { version = "1.0.0", features = [] }
+embassy-rp = { version = "0.10.0", features = ["rp235xa"] }
+
+[patch.crates-io]
+embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
