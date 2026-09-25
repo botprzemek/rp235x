@@ -1,4 +1,3 @@
-use std::eprintln;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -10,9 +9,9 @@ use aes_gcm::{
 };
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier};
 
-#[cfg(feature = "serde")]
-use crate::ConfigInput;
 use crate::{Config, ConfigError, Keys};
+#[cfg(feature = "serde")]
+use crate::{ConfigBuilder, Input};
 
 #[cfg(feature = "serde")]
 pub trait JsonReader {
@@ -29,7 +28,7 @@ pub trait BinWriter {
 
 #[cfg(feature = "serde")]
 impl JsonReader for Config {
-    fn read(path: &Path) -> Result<Self, ConfigError> {
+    fn read(path: &Path) -> Result<Config, ConfigError> {
         if !path.exists() {
             return Err(ConfigError::FileNotFound);
         }
@@ -44,22 +43,21 @@ impl JsonReader for Config {
         }
 
         let content = std::fs::read_to_string(path)?;
-        let input: ConfigInput =
+        let input: Input =
             serde_json::from_str(&content).map_err(|_| ConfigError::Serialization)?;
+        let mut builder = ConfigBuilder::default();
 
-        Config::new(
-            &input.serial_number,
-            &input.device_id,
-            &input.wifi_ssid,
-            &input.wifi_password,
-        )
+        builder
+            .serial_number(&input.serial_number)
+            .device_id(&input.device_id)
+            .wifi_ssid(&input.wifi_ssid)
+            .wifi_password(&input.wifi_password)
+            .build()
     }
 }
 
 impl BinReader for Config {
     fn read(path: &Path) -> Result<Self, ConfigError> {
-        let (verifying_key, decryption_key) = Keys::read().unwrap();
-
         if !path.exists() {
             return Err(ConfigError::FileNotFound);
         }
@@ -84,6 +82,7 @@ impl BinReader for Config {
         let (sig_bytes, rest) = file_bytes.split_at(64);
         let (nonce_bytes, ciphertext) = rest.split_at(12);
 
+        let (verifying_key, decryption_key) = Keys::read().unwrap();
         let verifying_key = SigningKey::from_bytes(verifying_key.as_bytes()).verifying_key();
 
         let signature = Signature::from_bytes(
@@ -118,19 +117,14 @@ impl BinReader for Config {
             return Err(ConfigError::IntegrityCheckFailed);
         }
 
-        Config::from_bytes(config_bytes).cloned()
+        let raw = Config::from_bytes(config_bytes)?;
+
+        raw.verify().cloned()
     }
 }
 
 impl BinWriter for Config {
     fn write(&self, path: &Path) -> Result<(), ConfigError> {
-        let (signing_key, encryption_key) = match Keys::read() {
-            Ok((signing_key, encryption_key)) => (signing_key, encryption_key),
-            Err(e) => {
-                eprintln!("{}", e);
-                return Ok(());
-            }
-        };
         let bytes = self.as_bytes();
         let checksum = crc32fast::hash(bytes);
 
@@ -138,6 +132,7 @@ impl BinWriter for Config {
         plaintext.extend_from_slice(&checksum.to_le_bytes());
         plaintext.extend_from_slice(bytes.as_ref());
 
+        let (signing_key, encryption_key) = Keys::read().unwrap();
         let cipher = Aes256Gcm::new(encryption_key.as_bytes().into());
         let nonce = Nonce::generate();
         let ciphertext = cipher

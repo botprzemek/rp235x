@@ -1,25 +1,25 @@
 #[cfg(feature = "std")]
 use std::time::Duration;
 
-use crate::{CONFIG_ADDR, CONFIG_SIZE, Config, ConfigError};
+use crate::{CONFIG_ADDR, CONFIG_SIZE, Config, ConfigError, Raw};
 #[cfg(feature = "std")]
 use probe_rs::{Permissions, flashing, probe};
 
-pub trait FlashReader {
+pub trait FlashReader<'a> {
     #[cfg(feature = "std")]
     fn read() -> Result<Config, ConfigError>;
     #[cfg(not(feature = "std"))]
-    fn read() -> Result<&'static Self, ConfigError>;
+    fn read() -> Result<&'a Config, ConfigError>;
 }
 
-#[cfg(feature = "std")]
 pub trait FlashWriter {
+    #[cfg(feature = "std")]
     fn write(self);
 }
 
-impl FlashReader for Config {
+impl<'a> FlashReader<'a> for Config {
     #[cfg(feature = "std")]
-    fn read() -> Result<Config, ConfigError> {
+    fn read() -> Result<Self, ConfigError> {
         use probe_rs::{MemoryInterface, Permissions, probe};
 
         let mut buffer = [0u8; CONFIG_SIZE];
@@ -32,16 +32,18 @@ impl FlashReader for Config {
         let mut core = session.core(0).unwrap();
         core.read_8(CONFIG_ADDR.try_into().unwrap(), &mut buffer)
             .unwrap();
+        let raw = Config::<Raw>::from_bytes(&buffer)?;
 
-        Self::from_bytes(&buffer).cloned()
+        raw.verify().cloned()
     }
 
     #[cfg(not(feature = "std"))]
-    fn read() -> Result<&'static Self, ConfigError> {
+    fn read() -> Result<&'a Self, ConfigError> {
         unsafe {
             let bytes = core::slice::from_raw_parts(CONFIG_ADDR as *const u8, CONFIG_SIZE);
+            let raw = Config::<Raw>::from_bytes(&bytes)?;
 
-            Self::from_bytes(bytes)
+            raw.verify()
         }
     }
 }
