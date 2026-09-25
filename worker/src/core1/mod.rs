@@ -23,7 +23,7 @@ impl Core1 {
 #[embassy_executor::task]
 async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
     let mut outputs = hub75::LedOutputs::from(peripherals);
-    let mut display = hub75::DisplayBuffer::<64, 32, 16>::new();
+    let mut display = hub75::DisplayBuffer::<64, 32, 16>::default();
 
     let mut home_str = heapless::String::<8>::new();
     let mut guest_str = heapless::String::<8>::new();

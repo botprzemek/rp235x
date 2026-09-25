@@ -23,7 +23,7 @@ bench = false
 
 [dependencies]
 config = { path = "../config", features = ["defmt"], default-features = false }
-hub75 = { path = "../hub75", features = [] }
+hub75 = { path = "../hub75", features = ["rp235x"] }
 net = { path = "../net", features = ["defmt"] }
 
 embassy-embedded-hal = { version = "0.6.0", features = ["defmt"] }
