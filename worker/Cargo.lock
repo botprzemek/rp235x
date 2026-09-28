@@ -66,6 +66,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "basketball"
+version = "0.1.0"
+dependencies = [
+ "defmt 1.1.0",
+ "net",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1761,6 +1769,7 @@ dependencies = [
 name = "worker"
 version = "0.1.0"
 dependencies = [
+ "basketball",
  "config",
  "cortex-m",
  "cortex-m-rt",

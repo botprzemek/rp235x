@@ -81,6 +81,10 @@ impl ServerPacket {
         crc
     }
 
+    pub fn event(&self) -> ServerEvent {
+        self.event
+    }
+
     pub fn data(self) -> [u8; layout::DATA_SIZE] {
         self.data
     }

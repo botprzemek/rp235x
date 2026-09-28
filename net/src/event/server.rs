@@ -4,7 +4,8 @@
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ServerEvent {
     HandshakeAck = 0x81,
-    Snapshot = 0xF0,
+
+    GameUpdate = 0xC0,
 }
 
 impl TryFrom<u8> for ServerEvent {
@@ -12,7 +13,8 @@ impl TryFrom<u8> for ServerEvent {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0x81 => Ok(ServerEvent::HandshakeAck),
-            0xF0 => Ok(ServerEvent::Snapshot),
+
+            0xC0 => Ok(ServerEvent::GameUpdate),
             _ => Err(""),
         }
     }

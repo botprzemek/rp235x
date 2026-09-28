@@ -84,4 +84,8 @@ impl ClientPacket {
     pub fn event(&self) -> ClientEvent {
         self.event
     }
+
+    pub fn data(self) -> [u8; layout::DATA_SIZE] {
+        self.data
+    }
 }

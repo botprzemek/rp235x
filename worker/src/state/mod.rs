@@ -1,9 +1,9 @@
 pub mod handler;
 
+use basketball::Game;
 use core::cell::RefCell;
 use defmt::Format;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex, signal::Signal};
-use net::data::snapshot::Snapshot;
 
 #[repr(u8)]
 #[derive(Clone, PartialEq, Eq, Format)]
@@ -34,8 +34,8 @@ pub struct Machine {
 }
 
 pub static STATE_SIGNAL: Signal<CriticalSectionRawMutex, State> = Signal::new();
-pub static GAME_STATE: Mutex<CriticalSectionRawMutex, RefCell<Snapshot>> =
-    Mutex::new(RefCell::new(Snapshot::empty()));
+pub static GAME_STATE: Mutex<CriticalSectionRawMutex, RefCell<Game>> =
+    Mutex::new(RefCell::new(Game::empty()));
 
 impl Machine {
     pub const fn new() -> Self {

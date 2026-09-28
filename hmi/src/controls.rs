@@ -1,6 +1,7 @@
-use net::data::snapshot::Team;
 use yew::platform::spawn_local;
 use yew::prelude::*;
+
+use basketball::Team;
 
 #[derive(Properties, PartialEq)]
 pub struct ControlsProps {

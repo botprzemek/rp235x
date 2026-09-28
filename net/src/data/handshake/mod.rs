@@ -11,8 +11,6 @@ pub struct Handshake {
 }
 
 impl Handshake {
-    // pub fn new() -> Self {}
-    // pub fn empty() -> Self {}
     pub fn new(protocol_version: u8, device_id: u32, flags: u8) -> Self {
         Self {
             protocol_version,

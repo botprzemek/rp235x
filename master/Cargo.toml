@@ -10,6 +10,7 @@ incremental = false
 codegen-units = 1
 
 [dependencies]
+basketball = { path = "../basketball" }
 hmi = { path = "../hmi" }
 net = { path = "../net", features = ["serde", "std"] }
 
@@ -32,7 +33,7 @@ tracing-web = "0.1.3"
 tracing-subscriber = { version = "0.3.23", features = ["fmt"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "fs"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "fs", "signal"] }
 axum = { version = "0.8.9", features = ["ws"] }
 tower-http = { version = "0.7.1", features = ["fs", "cors"] }
 

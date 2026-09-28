@@ -7,6 +7,7 @@ use crate::{
     },
     state::GAME_STATE,
 };
+use basketball::Game;
 use config::flash::FlashReader;
 use config::{Config, print::Print};
 use defmt::unwrap;
@@ -18,7 +19,6 @@ use embassy_net::{
 };
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use net::ServerPacket;
-use net::data::snapshot::Snapshot;
 use static_cell::StaticCell;
 
 pub static CORE1_READY_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
@@ -201,7 +201,7 @@ pub async fn udp_task(stack: Stack<'static>) {
                         };
 
                         let game_ref = GAME_STATE.lock().await;
-                        *game_ref.borrow_mut() = Snapshot::try_from(packet).unwrap();
+                        *game_ref.borrow_mut() = Game::try_from(packet).unwrap();
                     }
                     Err(e) => {
                         error!("udp_rx_error: {:?}", e);
@@ -209,7 +209,8 @@ pub async fn udp_task(stack: Stack<'static>) {
                 },
                 embassy_futures::select::Either::Second(_) => {
                     let mocked_data = [0u8; 27];
-                    let keepalive_packet = ClientPacket::new(ClientEvent::Start, 0, mocked_data);
+                    let keepalive_packet =
+                        ClientPacket::new(ClientEvent::GameStart, 0, mocked_data);
                     let packet_bytes = keepalive_packet.to_bytes();
 
                     if let Err(e) = socket.send_to(&packet_bytes, master_endpoint).await {

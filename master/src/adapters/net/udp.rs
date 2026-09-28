@@ -1,5 +1,5 @@
-pub async fn run() {
-    let active_worker: Arc<Mutex<Option<SocketAddr>>> = Arc::new(Mutex::new(None));
+pub async fn run(game_serivce) {
+    let active_worker: Arc<Option<SocketAddr>>> = Arc::new(None);
     let rx_udp_socket = Arc::clone(&udp_socket);
     let rx_worker_addr = Arc::clone(&active_worker);
     let rx_state_rx = state_rx.clone();
@@ -80,4 +80,7 @@ pub async fn run() {
             }
         }
     });
+
+    let udp_socket = Arc::new(UdpSocket::bind("0.0.0.0:9000").await?);
+    udp_socket.set_broadcast(true)?;
 }

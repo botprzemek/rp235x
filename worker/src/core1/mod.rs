@@ -1,5 +1,6 @@
 use crate::state::handler::CORE1_READY_SIGNAL;
 use crate::{peripherals::LedPeripherals, state::GAME_STATE};
+use basketball::{Scorable, Team};
 use defmt::unwrap;
 use embassy_executor::{Executor, Spawner};
 use static_cell::StaticCell;
@@ -47,8 +48,14 @@ async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
         let minutes = total_seconds / 60;
         let seconds = total_seconds % 60;
 
-        let _ = core::fmt::write(&mut home_str, format_args!("{:03}", game.home_score()));
-        let _ = core::fmt::write(&mut guest_str, format_args!("{:03}", game.away_score()));
+        let _ = core::fmt::write(
+            &mut home_str,
+            format_args!("{:03}", game.get_score(Team::Home)),
+        );
+        let _ = core::fmt::write(
+            &mut guest_str,
+            format_args!("{:03}", game.get_score(Team::Away)),
+        );
         let _ = core::fmt::write(&mut quarter_str, format_args!("{:?}", game.quarter()));
         let _ = core::fmt::write(
             &mut clock_str,
