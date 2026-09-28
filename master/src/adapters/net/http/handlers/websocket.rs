@@ -1,54 +1,59 @@
-// use crate::adapter::services::AppState;
+use std::sync::Arc;
 
-// use axum::Router;
-// use axum::extract::State;
-// use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-// use axum::response::IntoResponse;
-// use axum::routing::get;
-// use futures::SinkExt;
-// use futures::stream::StreamExt;
-// use tokio::net::TcpListener;
-// use tower_http::cors::CorsLayer;
+use crate::services::{Observable, Services};
 
-// async fn upgrade(socket: WebSocket, state: AppState) {
-//     let (mut sender, mut receiver) = socket.split();
-//     let mut rx = state.subscribe();
+use axum::{
+    Router,
+    extract::State,
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    response::IntoResponse,
+    routing::get,
+};
+use futures::{SinkExt, stream::StreamExt};
 
-//     let mut send_task = tokio::spawn(async move {
-//         while let Ok(msg) = rx.recv().await {
-//             let response = sender.send(Message::Text(msg.into())).await;
-//             if response.is_err() {
-//                 break;
-//             }
-//         }
-//     });
+pub struct WebsocketHandler;
 
-//     let mut recv_task = tokio::spawn(async move {
-//         while let Some(Ok(msg)) = receiver.next().await {
-//             if let Message::Close(_) = msg {
-//                 break;
-//             }
-//         }
-//     });
+impl WebsocketHandler {
+    pub fn create(services: Arc<Services>) -> Router {
+        Router::new()
+            .route("/ws", get(Self::handle))
+            .with_state(services)
+    }
 
-//     tokio::select! {
-//         _ = (&mut send_task) => recv_task.abort(),
-//         _ = (&mut recv_task) => send_task.abort(),
-//     }
-// }
+    async fn upgrade(socket: WebSocket, services: Arc<Services>) {
+        let (mut sender, mut receiver) = socket.split();
+        let mut rx = services.game().subscribe();
+        let _ = services.game().watch();
 
-// pub async fn handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-//     ws.on_upgrade(move |socket| handle_socket(socket, state))
-// }
+        let mut send_task = tokio::spawn(async move {
+            while let Ok(msg) = rx.recv().await {
+                let payload = axum::body::Bytes::copy_from_slice(&msg.to_bytes());
+                let response = sender.send(Message::Binary(payload)).await;
 
-// pub async fn run(state: AppState) {
-//     let ws_app = Router::new()
-//         .route("/ws", get(handler))
-//         .with_state(state)
-//         .layer(CorsLayer::permissive());
+                if response.is_err() {
+                    break;
+                }
+            }
+        });
 
-//     tokio::spawn(async move {
-//         let listener = TcpListener::bind("0.0.0.0:9000").await.unwrap();
-//         axum::serve(listener, ws_app).await.unwrap();
-//     });
-// }
+        let mut recv_task = tokio::spawn(async move {
+            while let Some(Ok(msg)) = receiver.next().await {
+                if let Message::Close(_) = msg {
+                    break;
+                }
+            }
+        });
+
+        tokio::select! {
+            _ = (&mut send_task) => recv_task.abort(),
+            _ = (&mut recv_task) => send_task.abort(),
+        }
+    }
+
+    pub async fn handle(
+        ws: WebSocketUpgrade,
+        State(services): State<Arc<Services>>,
+    ) -> impl IntoResponse {
+        ws.on_upgrade(move |socket| Self::upgrade(socket, services))
+    }
+}

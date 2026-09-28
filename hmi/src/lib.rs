@@ -2,6 +2,7 @@ mod controls;
 mod display;
 mod navigation;
 
+use basketball::{Game, Quarter, Scorable, State};
 use futures::StreamExt;
 use gloo_net::websocket::{Message, futures::WebSocket};
 use std::time::Duration;
@@ -14,28 +15,17 @@ use display::ScoreDisplay;
 use navigation::Navbar;
 
 pub enum Msg {
-    UpdateSnapshot(Snapshot),
+    UpdateGame(Game),
     ConnectionFailed,
     ToggleControls,
-}
-
-#[derive(serde::Deserialize, Clone, Debug)]
-pub struct Snapshot {
-    pub home_score: u16,
-    pub away_score: u16,
-    pub state: String,
-    #[serde(default)]
-    pub regulation_millis: u64,
-    #[serde(default)]
-    pub quarter: Option<String>,
 }
 
 pub struct ScoreboardComponent {
     home_score: u16,
     away_score: u16,
-    state: String,
-    regulation_millis: u64,
-    quarter: Option<String>,
+    state: State,
+    regulation_millis: u32,
+    quarter: Quarter,
     controls_hidden: bool,
     connected: bool,
 }
@@ -48,9 +38,9 @@ impl Component for ScoreboardComponent {
         Self {
             home_score: 0,
             away_score: 0,
-            state: "Oczekuje".to_string(),
+            state: State::Idle,
             regulation_millis: 0,
-            quarter: Some("Q1".to_string()),
+            quarter: Quarter::Q1,
             controls_hidden: false,
             connected: false,
         }
@@ -64,7 +54,7 @@ impl Component for ScoreboardComponent {
         let window = web_sys::window().unwrap();
         let hostname = window.location().hostname().unwrap_or("localhost".into());
 
-        let ws_url = format!("ws://{}:9000/ws", hostname);
+        let ws_url = format!("ws://{}:3000/ws", hostname);
 
         spawn_local(async move {
             loop {
@@ -77,10 +67,10 @@ impl Component for ScoreboardComponent {
                 };
 
                 let (_, mut read) = ws.split();
-                while let Some(Ok(Message::Text(text))) = read.next().await {
-                    if let Ok(data) = serde_json::from_str::<Snapshot>(&text) {
-                        link.send_message(Msg::UpdateSnapshot(data));
-                    }
+                while let Some(Ok(Message::Bytes(bytes))) = read.next().await {
+                    if let Ok(game) = Game::from_bytes(&bytes) {
+                        link.send_message(Msg::UpdateGame(game));
+                    };
                 }
 
                 link.send_message(Msg::ConnectionFailed);
@@ -91,19 +81,18 @@ impl Component for ScoreboardComponent {
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Msg::UpdateSnapshot(snapshot) => {
-                self.home_score = snapshot.home_score;
-                self.away_score = snapshot.away_score;
-                self.state = snapshot.state;
-                self.regulation_millis = snapshot.regulation_millis;
-                if let Some(q) = snapshot.quarter {
-                    self.quarter = Some(q);
-                }
+            Msg::UpdateGame(game) => {
+                let (home_score, away_score) = game.get_scores();
+                self.home_score = home_score;
+                self.away_score = away_score;
+                self.state = game.get_state();
+                self.regulation_millis = game.get_regulation_millis();
+                self.quarter = game.get_quarter();
                 self.connected = true;
                 true
             }
             Msg::ConnectionFailed => {
-                self.state = "Rozłączono".to_string();
+                self.state = State::Paused;
                 self.connected = false;
                 true
             }
@@ -115,7 +104,7 @@ impl Component for ScoreboardComponent {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let is_running = self.state == "Running";
+        let is_running = self.state == State::Running;
         let on_toggle_controls = ctx.link().callback(|_| Msg::ToggleControls);
 
         html! {
@@ -131,9 +120,9 @@ impl Component for ScoreboardComponent {
                     <ScoreDisplay
                         home_score={self.home_score}
                         away_score={self.away_score}
-                        state={self.state.clone()}
+                        state={self.state}
                         regulation_millis={self.regulation_millis}
-                        quarter={self.quarter.clone()}
+                        quarter={self.quarter}
                     />
                 </main>
 

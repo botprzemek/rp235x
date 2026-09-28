@@ -1,8 +1,9 @@
 use axum::{
+    Router,
     body::Body,
-    http::StatusCode,
-    http::{Uri, header},
+    http::{StatusCode, Uri, header},
     response::{IntoResponse, Response},
+    routing::get,
 };
 use hmi::App;
 use rust_embed::RustEmbed;
@@ -15,7 +16,13 @@ struct Assets;
 pub struct StaticHandler;
 
 impl StaticHandler {
-    pub async fn render() -> impl IntoResponse {
+    pub fn create() -> Router {
+        Router::new()
+            .route("/", get(Self::render))
+            .fallback(Self::fallback)
+    }
+
+    async fn render() -> impl IntoResponse {
         let renderer = ServerRenderer::<App>::new();
         let rendered_html = renderer.render().await;
 
@@ -30,13 +37,13 @@ impl StaticHandler {
             rendered_html
         };
 
-        axum::response::Response::builder()
+        Response::builder()
             .header("content-type", "text/html; charset=utf-8")
             .body(Body::from(html))
             .unwrap()
     }
 
-    pub async fn fallback(uri: Uri) -> impl IntoResponse {
+    async fn fallback(uri: Uri) -> impl IntoResponse {
         let path = uri.path().trim_start_matches('/');
         let path = if path.is_empty() { "index.html" } else { path };
 

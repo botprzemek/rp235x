@@ -10,8 +10,8 @@ pub struct Registry {
 }
 
 pub trait Repository<Entity> {
-    fn upsert(&self, entity: &Entity);
     fn select(&self) -> Entity;
+    fn upsert(&self, entity: Entity);
 }
 
 impl Registry {

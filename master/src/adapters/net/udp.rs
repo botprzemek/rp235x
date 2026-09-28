@@ -1,5 +1,9 @@
-pub async fn run(game_serivce) {
-    let active_worker: Arc<Option<SocketAddr>>> = Arc::new(None);
+use std::sync::Arc;
+
+use tokio::net::UdpSocket;
+
+pub async fn run(services: Arc<Services>) {
+    let active_worker: Arc<Option<SocketAddr>> = Arc::new(None);
     let rx_udp_socket = Arc::clone(&udp_socket);
     let rx_worker_addr = Arc::clone(&active_worker);
     let rx_state_rx = state_rx.clone();
@@ -81,6 +85,6 @@ pub async fn run(game_serivce) {
         }
     });
 
-    let udp_socket = Arc::new(UdpSocket::bind("0.0.0.0:9000").await?);
+    let udp_socket = Arc::new(UdpSocket::bind("0.0.0.0:9000").await.un);
     udp_socket.set_broadcast(true)?;
 }

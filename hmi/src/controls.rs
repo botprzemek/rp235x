@@ -1,7 +1,7 @@
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
-use basketball::Team;
+use basketball::{Score, Team};
 
 #[derive(Properties, PartialEq)]
 pub struct ControlsProps {
@@ -10,10 +10,10 @@ pub struct ControlsProps {
 
 #[function_component]
 pub fn ScoreboardControls(props: &ControlsProps) -> Html {
-    let send_score = move |team: Team, points: u16| {
+    let send_score = move |team: Team, score: Score| {
         spawn_local(async move {
-            let body = serde_json::json!({ "team": team, "points": points });
-            let _ = gloo_net::http::Request::post("/api/score")
+            let body = serde_json::json!({ "team": team, "score": score });
+            let _ = gloo_net::http::Request::post("/api/scores")
                 .header("Content-Type", "application/json")
                 .body(body.to_string())
                 .unwrap()
@@ -37,15 +37,15 @@ pub fn ScoreboardControls(props: &ControlsProps) -> Html {
             <div style="background: #ffffff; border: 1px solid #cbd5e1; padding: 20px; border-radius: 8px; display: flex; gap: 16px; justify-content: space-between; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
                 <div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
                     <div style="font-size: 12px; color: #64748b; font-weight: bold;">{"DRUŻYNA DOMOWA (HO)"}</div>
-                    <button onclick={move |_| send_score(Team::Home, 1)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+1 PKT"}</button>
-                    <button onclick={move |_| send_score(Team::Home, 2)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+2 PKT"}</button>
-                    <button onclick={move |_| send_score(Team::Home, 3)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+3 PKT"}</button>
+                    <button onclick={move |_| send_score(Team::Home, Score::FreeThrow)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+1 PKT"}</button>
+                    <button onclick={move |_| send_score(Team::Home, Score::FieldGoal2)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+2 PKT"}</button>
+                    <button onclick={move |_| send_score(Team::Home, Score::FieldGoal3)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+3 PKT"}</button>
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
                     <div style="font-size: 12px; color: #64748b; font-weight: bold;">{"DRUŻYNA GOŚCI (AW)"}</div>
-                    <button onclick={move |_| send_score(Team::Away, 1)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+1 PKT"}</button>
-                    <button onclick={move |_| send_score(Team::Away, 2)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+2 PKT"}</button>
-                    <button onclick={move |_| send_score(Team::Away, 3)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+3 PKT"}</button>
+                    <button onclick={move |_| send_score(Team::Away, Score::FreeThrow)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+1 PKT"}</button>
+                    <button onclick={move |_| send_score(Team::Away, Score::FieldGoal2)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+2 PKT"}</button>
+                    <button onclick={move |_| send_score(Team::Away, Score::FieldGoal3)} style="padding: 6px 12px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; color: #334155; border-radius: 4px;">{"+3 PKT"}</button>
                 </div>
             </div>
 

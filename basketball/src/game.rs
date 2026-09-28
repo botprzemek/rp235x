@@ -46,6 +46,10 @@ impl Scorable for Game {
             Team::Away => self.away_score,
         }
     }
+
+    fn get_scores(&self) -> (u16, u16) {
+        (self.home_score, self.away_score)
+    }
 }
 
 impl Game {
@@ -73,6 +77,18 @@ impl Game {
             regulation_millis: 0,
             clock_millis: 0,
         }
+    }
+
+    pub fn get_state(&self) -> State {
+        self.state
+    }
+
+    pub fn get_quarter(&self) -> Quarter {
+        self.quarter
+    }
+
+    pub fn get_regulation_millis(&self) -> u32 {
+        self.regulation_millis
     }
 
     pub fn get_regulation_time(&self) -> (u8, u8, u8) {

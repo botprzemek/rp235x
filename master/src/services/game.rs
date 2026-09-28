@@ -24,12 +24,12 @@ impl Observable<Game> for GameService {
 }
 
 impl GameService {
-    pub fn get_game(&self) -> Game {
+    pub fn get(&self) -> Game {
         self.game_repository.select()
     }
 
-    pub fn update_game(&self, game: Game) {
-        self.game_repository.upsert(&game);
+    pub fn update(&self, game: Game) {
+        self.game_repository.upsert(game);
         self.state.send(game).unwrap();
         self.broadcast.send(game).unwrap();
     }
@@ -37,6 +37,8 @@ impl GameService {
 
 impl GameService {
     pub fn new(game_repository: GameRepository) -> Self {
+        let game = basketball::Game::new(basketball::Discipline::Fiba5vs5);
+        game_repository.upsert(game);
         let (state, _state_rx) = watch::channel(game_repository.select());
         let (broadcast, _broadcast_rx) = broadcast::channel(100);
 

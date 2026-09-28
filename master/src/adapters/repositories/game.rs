@@ -10,7 +10,15 @@ pub struct GameRepository {
 }
 
 impl Repository<Game> for GameRepository {
-    fn upsert(&self, game: &Game) {
+    fn select(&self) -> Game {
+        let transaction = self.database.get_connection().begin_read().unwrap();
+        let table = transaction.open_table(GAME_TABLE).unwrap();
+        let bytes = table.get("current").unwrap().unwrap();
+
+        Game::from_bytes(bytes.value()).unwrap()
+    }
+
+    fn upsert(&self, game: Game) {
         let bytes = game.to_bytes();
         let transaction = self.database.get_connection().begin_write().unwrap();
         let mut table = transaction.open_table(GAME_TABLE).unwrap();
@@ -20,14 +28,6 @@ impl Repository<Game> for GameRepository {
         drop(table);
 
         transaction.commit().unwrap();
-    }
-
-    fn select(&self) -> Game {
-        let transaction = self.database.get_connection().begin_read().unwrap();
-        let table = transaction.open_table(GAME_TABLE).unwrap();
-        let bytes = table.get("current").unwrap().unwrap();
-
-        Game::from_bytes(bytes.value()).unwrap()
     }
 }
 

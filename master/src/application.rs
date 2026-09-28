@@ -88,7 +88,6 @@ impl<HTTP, UDP> Application<HTTP, UDP> {
         let database = ReDBProvider::new();
         let registry = Registry::new(database);
         let services = Arc::new(Services::new(registry));
-
         net::run(services).await;
 
         Self::shutdown().await;
