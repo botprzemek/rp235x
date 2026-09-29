@@ -37,9 +37,7 @@ impl TryFrom<u8> for Score {
             1 => Ok(Score::FreeThrow),
             2 => Ok(Score::FieldGoal2),
             3 => Ok(Score::FieldGoal3),
-            _ => {
-                return Err("");
-            }
+            _ => Err(""),
         }
     }
 }

@@ -10,7 +10,7 @@ use axum::{
 
 use crate::services::Services;
 
-use basketball::{Scorable, Score, Team};
+use basketball::{Score, Team};
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,11 +18,11 @@ pub struct GetScoreRequest {
     team: Team,
 }
 
-// #[derive(serde::Serialize)]
-// #[serde(rename_all = "camelCase")]
-// pub struct GetScoreResponse {
-//     score: u16,
-// }
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetScoreResponse {
+    score: u16,
+}
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,12 +46,13 @@ impl GameHandler {
             .route("/scores", get(Self::get_scores))
             .route("/scores", post(Self::add_score))
             .route("/teams/{team}/score", get(Self::get_score))
+            .route("/state/resume", post(Self::resume))
+            .route("/state/pause", post(Self::pause))
             .with_state(services)
     }
 
     async fn get_scores(State(services): State<Arc<Services>>) -> impl IntoResponse {
-        let game = services.game().get();
-        let (home_score, away_score) = game.get_scores();
+        let (home_score, away_score) = services.game().get_scores().await;
 
         Json(GetScoresResponse {
             home_score,
@@ -63,20 +64,28 @@ impl GameHandler {
         State(services): State<Arc<Services>>,
         Path(params): Path<GetScoreRequest>,
     ) -> impl IntoResponse {
-        let game = services.game().get();
+        let score = services.game().get_score(params.team).await;
 
-        Json(game.get_score(params.team))
+        Json(GetScoreResponse { score })
     }
 
     async fn add_score(
         State(services): State<Arc<Services>>,
         Json(body): Json<AddScoreRequest>,
     ) -> impl IntoResponse {
-        let mut game = services.game().get();
+        services.game().add_score(body.team, body.score).await;
 
-        game.score(body.team, body.score);
+        StatusCode::OK
+    }
 
-        services.game().update(game);
+    async fn resume(State(services): State<Arc<Services>>) -> impl IntoResponse {
+        services.game().resume().await;
+
+        StatusCode::OK
+    }
+
+    async fn pause(State(services): State<Arc<Services>>) -> impl IntoResponse {
+        services.game().pause().await;
 
         StatusCode::OK
     }

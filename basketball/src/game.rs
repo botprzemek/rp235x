@@ -236,4 +236,12 @@ impl Game {
     fn handle_quarter_end(&mut self) {}
 
     fn handle_end(&mut self) {}
+
+    pub fn pause(&mut self) {
+        self.set_state(State::Paused);
+    }
+
+    pub fn resume(&mut self) {
+        self.set_state(State::Running);
+    }
 }

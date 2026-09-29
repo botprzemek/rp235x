@@ -10,13 +10,28 @@ pub use handlers::{GameHandler, StaticHandler, WebsocketHandler};
 
 use crate::services::Services;
 
-pub async fn run(services: Arc<Services>) {
-    let server = Router::new()
-        .merge(StaticHandler::create())
-        .merge(WebsocketHandler::create(services.clone()))
-        .nest("/api", GameHandler::create(services.clone()))
-        .layer(CorsLayer::permissive());
+pub struct WebDriver {
+    listener: TcpListener,
+}
 
-    let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, server).await.unwrap();
+impl WebDriver {
+    pub fn new(listener: TcpListener) -> Self {
+        Self { listener }
+    }
+
+    pub fn spawn(self, services: Arc<Services>) {
+        tokio::spawn(async move {
+            Self::run(self, services).await;
+        });
+    }
+
+    pub async fn run(self, services: Arc<Services>) {
+        let server = Router::new()
+            .merge(StaticHandler::create())
+            .merge(WebsocketHandler::create(services.clone()))
+            .nest("/api", GameHandler::create(services.clone()))
+            .layer(CorsLayer::permissive());
+
+        axum::serve(self.listener, server).await.unwrap();
+    }
 }

@@ -1,8 +1,10 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use tokio::net::{TcpListener, UdpSocket};
+
 use crate::adapters::data::ReDBProvider;
-use crate::adapters::net;
+use crate::adapters::net::{WebDriver, WorkerDriver};
 use crate::adapters::repositories::Registry;
 use crate::services::Services;
 
@@ -88,7 +90,12 @@ impl<HTTP, UDP> Application<HTTP, UDP> {
         let database = ReDBProvider::new();
         let registry = Registry::new(database);
         let services = Arc::new(Services::new(registry));
-        net::run(services).await;
+
+        let tcp = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+        let udp = UdpSocket::bind("0.0.0.0:9000").await.unwrap();
+
+        WebDriver::new(tcp).spawn(services.clone());
+        WorkerDriver::new(udp).spawn(services.clone());
 
         Self::shutdown().await;
     }

@@ -1,19 +1,55 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+use tokio::{net::UdpSocket, time};
 
-use tokio::net::UdpSocket;
+use crate::services::{Observable, Services};
+use net::{ClientEvent, ClientPacket, ServerEvent, ServerPacket};
 
-pub async fn run(services: Arc<Services>) {
-    let active_worker: Arc<Option<SocketAddr>> = Arc::new(None);
-    let rx_udp_socket = Arc::clone(&udp_socket);
-    let rx_worker_addr = Arc::clone(&active_worker);
-    let rx_state_rx = state_rx.clone();
+const FRAME_DURATION: Duration = Duration::from_millis(16); // ~60 FPS
 
-    tokio::spawn(async move {
+pub struct WorkerDriver {
+    listener: Arc<UdpSocket>,
+}
+
+impl WorkerDriver {
+    pub fn new(listener: UdpSocket) -> Self {
+        Self {
+            listener: Arc::new(listener),
+        }
+    }
+
+    pub fn spawn(self, services: Arc<Services>) {
+        tokio::spawn(async move {
+            Self::run(self, services).await;
+        });
+    }
+
+    async fn run(self, services: Arc<Services>) {
+        // Tworzymy kanał watch do przekazywania adresu aktywnego workera bez Mutexów
+        let (worker_tx, worker_rx) = tokio::sync::watch::channel(None);
+
+        let rx_socket = Arc::clone(&self.listener);
+        let rx_services = Arc::clone(&services);
+        tokio::spawn(async move {
+            Self::handle_incoming(rx_socket, rx_services, worker_tx).await;
+        });
+
+        let tx_socket = Arc::clone(&self.listener);
+        let tx_services = Arc::clone(&services);
+        tokio::spawn(async move {
+            Self::handle_ticks(tx_socket, tx_services, worker_rx).await;
+        });
+    }
+
+    async fn handle_incoming(
+        socket: Arc<UdpSocket>,
+        services: Arc<Services>,
+        worker_tx: tokio::sync::watch::Sender<Option<SocketAddr>>,
+    ) {
         let mut sequence_id: u8 = 0;
         let mut rx_buf = [0u8; net::layout::PACKET_SIZE];
 
         loop {
-            let (size, remote_addr) = match rx_udp_socket.recv_from(&mut rx_buf).await {
+            let (size, remote_addr) = match socket.recv_from(&mut rx_buf).await {
                 Ok(res) => res,
                 Err(_) => continue,
             };
@@ -33,58 +69,74 @@ pub async fn run(services: Arc<Services>) {
             };
 
             match packet.event() {
-                ClientEvent::HandshakeRequest | ClientEvent::Start | ClientEvent::Heartbeat => {
-                    let mut worker_lock = rx_worker_addr.lock().await;
-                    if worker_lock.is_none() || worker_lock.unwrap() != remote_addr {
-                        println!("[MASTER] Połączono z workerem UDP: {}", remote_addr);
-                    }
-                    *worker_lock = Some(remote_addr);
+                ClientEvent::GameStart
+                | ClientEvent::HandshakeRequest
+                | ClientEvent::HandshakeHeartbeat => {
+                    // Rejestrujemy / odświeżamy adres workera w kanale watch
+                    let _ = worker_tx.send(Some(remote_addr));
 
                     sequence_id = sequence_id.wrapping_add(1);
-                    let data = *rx_state_rx.borrow();
-                    let ack_packet =
-                        ServerPacket::new(ServerEvent::HandshakeAck, sequence_id, data.to_bytes());
-                    let _ = rx_udp_socket
-                        .send_to(&ack_packet.to_bytes(), remote_addr)
-                        .await;
+                    let current_game = services.game().get();
+
+                    let ack_packet = ServerPacket::new(
+                        ServerEvent::HandshakeAck,
+                        sequence_id,
+                        current_game.to_bytes(),
+                    );
+                    let _ = socket.send_to(&ack_packet.to_bytes(), remote_addr).await;
                 }
                 _ => {}
             }
         }
-    });
+    }
 
-    let tick_state_rx = state_rx.clone();
-    let tick_state_tx = state_tx.clone();
-    let tick_ws_tx = tx.clone();
-    let tick_udp_socket = Arc::clone(&udp_socket);
-    let tick_worker_addr = Arc::clone(&active_worker);
-
-    tokio::spawn(async move {
+    async fn handle_ticks(
+        socket: Arc<UdpSocket>,
+        services: Arc<Services>,
+        mut worker_rx: tokio::sync::watch::Receiver<Option<SocketAddr>>,
+    ) {
         let mut interval = time::interval(FRAME_DURATION);
         let mut sequence_id: u8 = 0;
+        let mut broadcast_rx = services.game().subscribe();
 
         loop {
-            interval.tick().await;
+            let active_worker = *worker_rx.borrow();
 
-            let mut current_state = *tick_state_rx.borrow();
-            current_state.tick(FRAME_DURATION);
+            tokio::select! {
+                _ = interval.tick() => {
+                    let mut current_game = services.game().get();
+                    current_game.tick(FRAME_DURATION);
+                    services.game().update(current_game.clone());
 
-            let _ = tick_state_tx.send(current_state);
+                    if let Some(addr) = active_worker {
+                        sequence_id = sequence_id.wrapping_add(1);
+                        let packet = ServerPacket::new(
+                            ServerEvent::GameUpdate,
+                            sequence_id,
+                            current_game.to_bytes(),
+                        );
+                        let _ = socket.send_to(&packet.to_bytes(), addr).await;
+                    }
+                }
 
-            if let Ok(json) = serde_json::to_string(&current_state) {
-                let _ = tick_ws_tx.send(json);
-            }
-
-            let worker = *tick_worker_addr.lock().await;
-            if let Some(addr) = worker {
-                sequence_id = sequence_id.wrapping_add(1);
-                let packet =
-                    ServerPacket::new(ServerEvent::Snapshot, sequence_id, current_state.to_bytes());
-                let _ = tick_udp_socket.send_to(&packet.to_bytes(), addr).await;
+                // 2. Gdy stan zmieni się przez HTTP / WebSockety (odbieramy z kanału broadcast)
+                result = broadcast_rx.recv() => {
+                    match result {
+                        Ok(game) => {
+                            if let Some(addr) = active_worker {
+                                sequence_id = sequence_id.wrapping_add(1);
+                                let packet = ServerPacket::new(
+                                    ServerEvent::GameUpdate,
+                                    sequence_id,
+                                    game.to_bytes(),
+                                );
+                                let _ = socket.send_to(&packet.to_bytes(), addr).await;
+                            }
+                        }
+                        Err(_) => {}
+                    }
+                }
             }
         }
-    });
-
-    let udp_socket = Arc::new(UdpSocket::bind("0.0.0.0:9000").await.un);
-    udp_socket.set_broadcast(true)?;
+    }
 }

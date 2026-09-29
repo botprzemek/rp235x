@@ -25,8 +25,8 @@ pub fn ScoreboardControls(props: &ControlsProps) -> Html {
     let is_running = props.is_running;
     let toggle_match_state = move |_| {
         spawn_local(async move {
-            let action = if is_running { "stop" } else { "start" };
-            let _ = gloo_net::http::Request::post(&format!("/api/{}", action))
+            let action = if is_running { "pause" } else { "resume" };
+            let _ = gloo_net::http::Request::post(&format!("/api/state/{}", action))
                 .send()
                 .await;
         });
