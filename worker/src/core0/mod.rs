@@ -2,7 +2,7 @@ pub mod cyw43;
 pub mod net;
 
 use crate::peripherals::{NetPeripherals, TrngPeripherals};
-use crate::state::{Input, Machine, State, handler::Handler};
+use crate::state::{Machine, handler::Handler};
 use defmt::unwrap;
 use embassy_executor::{Executor, Spawner};
 use static_cell::StaticCell;
@@ -28,12 +28,4 @@ async fn task(spawner: Spawner, net: NetPeripherals, trng: TrngPeripherals) {
     state_machine.handle_boot().await;
     state_machine.handle_sync().await;
     state_machine.handle_networking(spawner, net, trng).await;
-
-    loop {
-        match state_machine.current_state() {
-            State::Running => state_machine.handle_running().await,
-            State::ErrorRecovery => state_machine.handle_error_recovery().await,
-            _ => state_machine.transition(Input::ErrorOccurred),
-        }
-    }
 }

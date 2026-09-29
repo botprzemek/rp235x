@@ -1,10 +1,13 @@
 pub mod handler;
 
+use basketball::Game;
+use core::cell::RefCell;
 use defmt::Format;
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex, signal::Signal};
 
 #[repr(u8)]
 #[derive(Clone, PartialEq, Eq, Format)]
+#[allow(dead_code)]
 pub enum Input {
     None = 0x00,
     BootSuccess = 0x10,
@@ -31,6 +34,8 @@ pub struct Machine {
 }
 
 pub static STATE_SIGNAL: Signal<CriticalSectionRawMutex, State> = Signal::new();
+pub static GAME_STATE: Mutex<CriticalSectionRawMutex, RefCell<Game>> =
+    Mutex::new(RefCell::new(Game::empty()));
 
 impl Machine {
     pub const fn new() -> Self {

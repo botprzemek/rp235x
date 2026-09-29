@@ -1,26 +1,28 @@
-use crate::peripherals::LedPeripherals;
+use crate::LedOutputs;
+
 use embassy_rp::gpio::{Level, Output};
+use embassy_rp::{Peri, peripherals};
 
-pub struct LedOutputs {
-    pub r1: Output<'static>,
-    pub g1: Output<'static>,
-    pub b1: Output<'static>,
-    pub r2: Output<'static>,
-    pub g2: Output<'static>,
-    pub b2: Output<'static>,
+pub struct LedPeripherals {
+    pub r1: Peri<'static, peripherals::PIN_2>,
+    pub g1: Peri<'static, peripherals::PIN_3>,
+    pub b1: Peri<'static, peripherals::PIN_4>,
+    pub r2: Peri<'static, peripherals::PIN_5>,
+    pub g2: Peri<'static, peripherals::PIN_8>,
+    pub b2: Peri<'static, peripherals::PIN_9>,
 
-    pub a: Output<'static>,
-    pub b: Output<'static>,
-    pub c: Output<'static>,
-    pub d: Output<'static>,
-    pub _e: Output<'static>,
+    pub a: Peri<'static, peripherals::PIN_10>,
+    pub b: Peri<'static, peripherals::PIN_16>,
+    pub c: Peri<'static, peripherals::PIN_18>,
+    pub d: Peri<'static, peripherals::PIN_20>,
+    pub e: Peri<'static, peripherals::PIN_22>,
 
-    pub clk: Output<'static>,
-    pub lat: Output<'static>,
-    pub oe: Output<'static>,
+    pub clk: Peri<'static, peripherals::PIN_11>,
+    pub lat: Peri<'static, peripherals::PIN_12>,
+    pub oe: Peri<'static, peripherals::PIN_13>,
 }
 
-impl From<LedPeripherals> for LedOutputs {
+impl From<LedPeripherals> for LedOutputs<Output<'static>> {
     fn from(peripherals: LedPeripherals) -> Self {
         Self {
             r1: Output::new(peripherals.r1, Level::Low),

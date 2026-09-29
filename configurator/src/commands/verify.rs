@@ -1,13 +1,14 @@
 use std::path::PathBuf;
 
-use config::{Config, ConfigError, file::FileReader};
-
-use anyhow::{Error, anyhow};
 use clap::Args;
+use config::{Config, ConfigError, file::BinReader, print::Print};
 
 #[derive(Args)]
 #[command(about="TODO", long_about = None)]
 pub struct VerifyArgs {
+    #[arg(short, long)]
+    pub verbose: bool,
+
     #[arg(default_value = "config.bin")]
     pub path: PathBuf,
 }
@@ -15,10 +16,11 @@ pub struct VerifyArgs {
 pub struct VerifyCommand;
 
 impl VerifyCommand {
-    pub fn handle(args: VerifyArgs) -> Result<(), Error> {
-        let config = Config::read_bin(&args.path)?;
-        if !config.verify_integrity() {
-            return Err(anyhow!(ConfigError::IntegrityCheckFailed));
+    pub fn handle(args: VerifyArgs) -> Result<(), ConfigError> {
+        let config = Config::read(&args.path)?;
+
+        if args.verbose {
+            config.print()?;
         }
 
         Ok(())

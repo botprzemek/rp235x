@@ -10,4 +10,4 @@ runner = "probe-rs run --chip RP235x --speed 12000"
 linker = "flip-link"
 
 [env]
-DEFMT_LOG = "debug,cyw43=off,embassy_net=off,smoltcp=off"
+DEFMT_LOG = "debug" #,cyw43=off,embassy_net=off,smoltcp=off"

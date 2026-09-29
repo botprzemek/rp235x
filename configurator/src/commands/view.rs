@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
-use config::{Config, file::FileReader, print::Print};
-
-use anyhow::Error;
 use clap::Args;
+use config::{Config, ConfigError, file::BinReader, print::Print};
 
 #[derive(Args)]
 #[command(about="TODO", long_about = None)]
@@ -15,8 +13,8 @@ pub struct ViewArgs {
 pub struct ViewCommand;
 
 impl ViewCommand {
-    pub fn handle(args: ViewArgs) -> Result<(), Error> {
-        let config = Config::read_bin(&args.path)?;
+    pub fn handle(args: ViewArgs) -> Result<(), ConfigError> {
+        let config = Config::read(&args.path)?;
 
         config.print()?;
 

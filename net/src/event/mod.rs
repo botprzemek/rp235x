@@ -1,8 +1,5 @@
-mod client;
-mod server;
+pub mod client;
+pub mod server;
 
-#[cfg(feature = "client")]
-pub use client::*;
-
-#[cfg(feature = "server")]
-pub use server::*;
+pub use client::ClientEvent;
+pub use server::ServerEvent;

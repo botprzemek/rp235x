@@ -1,9 +1,8 @@
-mod led;
 mod net;
 mod trng;
 
 use embassy_rp::{Peri, Peripherals, peripherals::CORE1};
-pub use led::LedPeripherals;
+pub use hub75::LedPeripherals;
 pub use net::NetPeripherals;
 pub use trng::TrngPeripherals;
 
