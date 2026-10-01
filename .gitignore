@@ -1,8 +1,16 @@
-.DS_Store
-**/target
-**/dist
-**/firmware_*.bin
-**/config*.bin
-**/config*.json
+# Environment specific
 .vscode
-**/*.redb
+.DS_Store
+
+# All crates
+**/target
+
+# Configurator
+configurator/*.bin
+configurator/*.json
+
+# HMI
+hmi/*dist
+
+# Master
+master/*.redb
