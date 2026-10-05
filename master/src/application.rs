@@ -1,10 +1,11 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use net::WebSocketTransport;
 use tokio::net::{TcpListener, UdpSocket};
 
 use crate::adapters::data::ReDBProvider;
-use crate::adapters::net::{WebDriver, WorkerDriver};
+use crate::adapters::net::{TungsteniteAdapter, WebDriver, WorkerDriver};
 use crate::adapters::repositories::Registry;
 use crate::services::Services;
 
@@ -91,11 +92,16 @@ impl<HTTP, UDP> Application<HTTP, UDP> {
         let registry = Registry::new(database);
         let services = Arc::new(Services::new(registry));
 
-        let tcp = TcpListener::bind("0.0.0.0:3000").await.unwrap();
-        let udp = UdpSocket::bind("0.0.0.0:9000").await.unwrap();
+        let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
-        WebDriver::new(tcp).spawn(services.clone());
-        WorkerDriver::new(udp).spawn(services.clone());
+        let (stream, remote_address) = listener.accept().await.unwrap();
+
+        let stream = tokio_tungstenite::accept_async(stream).await.unwrap();
+        let adapter = TungsteniteAdapter::new(stream);
+
+        let transport = WebSocketTransport::new(adapter, Some(remote_address));
+
+        crate::adapters::net::run(transport, services).await;
 
         Self::shutdown().await;
     }

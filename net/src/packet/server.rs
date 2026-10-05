@@ -46,7 +46,7 @@ impl ServerPacket {
         bytes
     }
 
-    pub fn from_bytes(buffer: &[u8; layout::PACKET_SIZE]) -> Result<Self, &'static str> {
+    pub fn from_bytes(buffer: [u8; layout::PACKET_SIZE]) -> Result<Self, &'static str> {
         if buffer[layout::MAGIC] != PACKET_MAGIC {
             return Err("");
         }

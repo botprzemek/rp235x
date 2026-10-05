@@ -1,3 +1,5 @@
+pub mod websocket_test;
+
 mod controls;
 mod display;
 mod navigation;
@@ -66,12 +68,12 @@ impl Component for ScoreboardComponent {
                     }
                 };
 
-                let (_, mut read) = ws.split();
-                while let Some(Ok(Message::Bytes(bytes))) = read.next().await {
-                    if let Ok(game) = Game::from_bytes(&bytes) {
-                        link.send_message(Msg::UpdateGame(game));
-                    };
-                }
+                // let (_, mut read) = ws.split();
+                // while let Some(Ok(Message::Bytes(bytes))) = read.next().await {
+                //     if let Ok(game) = Game::from_bytes(bytes.) {
+                //         link.send_message(Msg::UpdateGame(game));
+                //     };
+                // }
 
                 link.send_message(Msg::ConnectionFailed);
                 sleep(Duration::from_secs(3)).await;

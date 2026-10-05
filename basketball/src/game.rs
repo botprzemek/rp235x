@@ -1,6 +1,9 @@
 use net::{ClientPacket, ServerPacket};
 
-use crate::{Discipline, Quarter, Scorable, Score, State, Team, layout};
+use crate::{
+    Discipline, Quarter, Scorable, Score, State, Team,
+    layout::{self, DATA_SIZE},
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -18,16 +21,16 @@ pub struct Game {
     clock_millis: u32,
 }
 
-impl TryFrom<ServerPacket> for Game {
+impl TryFrom<ClientPacket> for Game {
     type Error = &'static str;
-    fn try_from(packet: ServerPacket) -> Result<Self, Self::Error> {
+    fn try_from(packet: ClientPacket) -> Result<Self, Self::Error> {
         Self::from_bytes(&packet.data())
     }
 }
 
-impl TryFrom<ClientPacket> for Game {
+impl TryFrom<ServerPacket> for Game {
     type Error = &'static str;
-    fn try_from(packet: ClientPacket) -> Result<Self, Self::Error> {
+    fn try_from(packet: ServerPacket) -> Result<Self, Self::Error> {
         Self::from_bytes(&packet.data())
     }
 }

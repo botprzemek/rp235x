@@ -46,9 +46,9 @@ impl ClientPacket {
         bytes
     }
 
-    pub fn from_bytes(buffer: &[u8; layout::PACKET_SIZE]) -> Result<Self, &'static str> {
+    pub fn from_bytes(buffer: [u8; layout::PACKET_SIZE]) -> Result<Self, &'static str> {
         if buffer[layout::MAGIC] != PACKET_MAGIC {
-            return Err("");
+            return Err("magic");
         }
 
         let packet = Self {
@@ -65,7 +65,7 @@ impl ClientPacket {
         };
 
         if packet.calculate_crc() != packet.crc {
-            return Err("");
+            return Err("crc");
         }
 
         Ok(packet)

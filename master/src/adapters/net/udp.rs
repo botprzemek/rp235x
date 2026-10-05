@@ -63,7 +63,7 @@ impl WorkerDriver {
                 Err(_) => continue,
             };
 
-            let packet = match ClientPacket::from_bytes(&packet_array) {
+            let packet = match ClientPacket::from_bytes(packet_array) {
                 Ok(p) => p,
                 Err(_) => continue,
             };

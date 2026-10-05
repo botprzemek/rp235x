@@ -3,14 +3,11 @@ name = "hmi"
 version = "0.1.0"
 edition = "2024"
 
-[[bin]]
-name = "hydrate"
-
 [dependencies]
 basketball = { path = "../basketball", features = ["serde"] }
 net = { path = "../net", features = ["serde", "std"] }
 
-yew = { version = "0.23.0", features = ["csr", "hydration"] }
+yew = { version = "0.23.0", features = ["csr"] }
 reqwest = { version = "0.13.4", features = ["json"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151" }
@@ -31,5 +28,7 @@ tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "fs"] }
 axum = { version = "0.8.9", features = ["ws"] }
 tower-http = { version = "0.7.1", features = ["fs", "cors"] }
 
-[dev-dependencies]
-yew = { version = "0.23.0", features = ["hydration"] }
+[features]
+default = ["csr"]
+csr = []
+ssr = ["yew/hydration"]
