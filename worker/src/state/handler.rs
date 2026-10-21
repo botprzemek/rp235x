@@ -159,7 +159,7 @@ pub async fn udp_task(stack: Stack<'static>) {
                 continue;
             }
 
-            let _packet = match ServerPacket::from_bytes(&rx_packet_buf) {
+            let _packet = match ServerPacket::from_bytes(rx_packet_buf) {
                 Ok(packet) => packet,
                 Err(_) => continue,
             };
@@ -195,7 +195,7 @@ pub async fn udp_task(stack: Stack<'static>) {
 
                         missed_heartbeats = 0;
 
-                        let packet = match ServerPacket::from_bytes(&rx_packet_buf) {
+                        let packet = match ServerPacket::from_bytes(rx_packet_buf) {
                             Ok(packet) => packet,
                             Err(_) => continue,
                         };
