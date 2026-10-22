@@ -85,6 +85,14 @@ impl ClientPacket {
         self.event
     }
 
+    pub fn sequence_id(&self) -> u8 {
+        self.sequence_id
+    }
+
+    pub fn version(&self) -> u8 {
+        self.version
+    }
+
     pub fn data(self) -> [u8; layout::DATA_SIZE] {
         self.data
     }

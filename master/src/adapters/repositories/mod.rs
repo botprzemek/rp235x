@@ -1,12 +1,14 @@
+mod device;
 mod game;
 
+pub use device::DeviceRepository;
 pub use game::GameRepository;
 
 use crate::adapters::data::ReDBProvider;
 
 pub struct Registry {
     game: GameRepository,
-    _game: GameRepository,
+    devices: DeviceRepository,
 }
 
 pub trait Repository<Entity> {
@@ -17,12 +19,16 @@ pub trait Repository<Entity> {
 impl Registry {
     pub fn new(database: ReDBProvider) -> Self {
         let game = GameRepository::new(database.clone());
-        let _game = GameRepository::new(database.clone());
+        let devices = DeviceRepository::new(database);
 
-        Self { game, _game }
+        Self { game, devices }
     }
 
     pub fn game(&self) -> &GameRepository {
         &self.game
+    }
+
+    pub fn devices(&self) -> &DeviceRepository {
+        &self.devices
     }
 }

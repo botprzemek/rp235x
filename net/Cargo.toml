@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+config = { path = "../config", default-features = false }
 defmt = { version = "1.1.0", features = [], optional = true }
 serde = { version = "1.0.228", features = [], optional = true }
 

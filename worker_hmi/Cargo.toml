@@ -1,0 +1,39 @@
+[package]
+name = "worker_hmi"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+basketball = { path = "../basketball", features = ["serde"] }
+config = { path = "../config", default-features = false }
+hub75 = { path = "../hub75", default-features = false }
+net = { path = "../net", features = ["serde", "std"] }
+
+yew = { version = "0.23.0", features = ["csr"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151" }
+futures = { version = "0.3.34", default-features = false }
+web-sys = { version = "0.3.105", features = [
+        "BinaryType",
+        "CanvasRenderingContext2d",
+        "Element",
+        "HtmlCanvasElement",
+        "Location",
+        "MessageEvent",
+        "Storage",
+        "WebSocket",
+        "Window",
+    ]
+}
+gloo-net = { version = "0.7.0" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4.78"
+tracing-web = "0.1.3"
+tracing-subscriber = { version = "0.3.23", features = ["fmt"] }
+
+[features]
+default = ["csr"]
+csr = []
+ssr = ["yew/hydration"]
+

@@ -48,7 +48,7 @@ impl ServerPacket {
 
     pub fn from_bytes(buffer: [u8; layout::PACKET_SIZE]) -> Result<Self, &'static str> {
         if buffer[layout::MAGIC] != PACKET_MAGIC {
-            return Err("");
+            return Err("magic");
         }
 
         let packet = Self {
@@ -65,7 +65,7 @@ impl ServerPacket {
         };
 
         if packet.calculate_crc() != packet.crc {
-            return Err("");
+            return Err("crc");
         }
 
         Ok(packet)
@@ -83,6 +83,14 @@ impl ServerPacket {
 
     pub fn event(&self) -> ServerEvent {
         self.event
+    }
+
+    pub fn sequence_id(&self) -> u8 {
+        self.sequence_id
+    }
+
+    pub fn version(&self) -> u8 {
+        self.version
     }
 
     pub fn data(self) -> [u8; layout::DATA_SIZE] {

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use redb::{Database, TableDefinition};
 
 pub const GAME_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("games");
+pub const DEVICES_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("devices");
 
 #[derive(Clone)]
 pub struct ReDBProvider {
@@ -19,6 +20,7 @@ impl ReDBProvider {
         {
             let write_tx = connection.begin_write().unwrap();
             write_tx.open_table(GAME_TABLE).unwrap();
+            write_tx.open_table(DEVICES_TABLE).unwrap();
             write_tx.commit().unwrap();
         }
 

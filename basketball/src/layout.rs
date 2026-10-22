@@ -11,3 +11,5 @@ pub const REGULATION_MILLIS_START: usize = 0x07;
 pub const REGULATION_MILLIS_END: usize = 0x0B;
 pub const CLOCK_MILLIS_START: usize = 0x0B;
 pub const CLOCK_MILLIS_END: usize = 0x0F;
+pub const ID_START: usize = 0x0F;
+pub const ID_END: usize = 0x11;

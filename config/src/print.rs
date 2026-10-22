@@ -10,6 +10,10 @@ use std::{format, println};
 use defmt::info;
 
 pub trait Print {
+    #[cfg(feature = "defmt")]
+    fn print(&self) -> Result<(), ConfigError>;
+
+    #[cfg(feature = "std")]
     fn print(&self) -> Result<(), ConfigError>;
 }
 

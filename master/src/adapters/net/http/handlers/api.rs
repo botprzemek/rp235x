@@ -43,12 +43,22 @@ pub struct GameHandler;
 impl GameHandler {
     pub fn create(services: Arc<Services>) -> Router {
         Router::new()
+            .route("/devices", get(Self::get_devices))
+            .route("/games", get(Self::get_games))
             .route("/scores", get(Self::get_scores))
             .route("/scores", post(Self::add_score))
             .route("/teams/{team}/score", get(Self::get_score))
             .route("/state/resume", post(Self::resume))
             .route("/state/pause", post(Self::pause))
             .with_state(services)
+    }
+
+    async fn get_devices(State(services): State<Arc<Services>>) -> impl IntoResponse {
+        Json(services.devices().get_all())
+    }
+
+    async fn get_games(State(services): State<Arc<Services>>) -> impl IntoResponse {
+        Json(services.game().get_all())
     }
 
     async fn get_scores(State(services): State<Arc<Services>>) -> impl IntoResponse {

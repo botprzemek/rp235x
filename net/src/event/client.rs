@@ -11,6 +11,8 @@ pub enum ClientEvent {
     GamePause = 0x12,
     GameEnd = 0x13,
     GameReset = 0x14,
+    GameSelect = 0x15,
+    GameCreate = 0x16,
 
     GameScoreHomeFT = 0x20,
     GameScoreHome2FG = 0x21,
@@ -19,6 +21,9 @@ pub enum ClientEvent {
     GameScoreAwayFT = 0x30,
     GameScoreAway2FG = 0x31,
     GameScoreAway3FG = 0x32,
+
+    DeviceDisconnect = 0x40,
+    DeviceAssignGame = 0x41,
 }
 
 impl TryFrom<u8> for ClientEvent {
@@ -33,6 +38,8 @@ impl TryFrom<u8> for ClientEvent {
             0x12 => Ok(ClientEvent::GamePause),
             0x13 => Ok(ClientEvent::GameEnd),
             0x14 => Ok(ClientEvent::GameReset),
+            0x15 => Ok(ClientEvent::GameSelect),
+            0x16 => Ok(ClientEvent::GameCreate),
 
             0x20 => Ok(ClientEvent::GameScoreHomeFT),
             0x21 => Ok(ClientEvent::GameScoreHome2FG),
@@ -41,6 +48,9 @@ impl TryFrom<u8> for ClientEvent {
             0x30 => Ok(ClientEvent::GameScoreAwayFT),
             0x31 => Ok(ClientEvent::GameScoreAway2FG),
             0x32 => Ok(ClientEvent::GameScoreAway3FG),
+
+            0x40 => Ok(ClientEvent::DeviceDisconnect),
+            0x41 => Ok(ClientEvent::DeviceAssignGame),
 
             _ => Err(""),
         }

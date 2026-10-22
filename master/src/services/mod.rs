@@ -1,5 +1,7 @@
+mod device;
 mod game;
 
+pub use device::DeviceService;
 pub use game::GameService;
 use tokio::sync::{broadcast, watch};
 
@@ -8,7 +10,7 @@ use crate::adapters::repositories::Registry;
 #[derive(Clone)]
 pub struct Services {
     game: GameService,
-    _game: GameService,
+    devices: DeviceService,
 }
 
 pub trait Observable<E> {
@@ -19,12 +21,16 @@ pub trait Observable<E> {
 impl Services {
     pub fn new(registry: Registry) -> Self {
         let game = GameService::new(registry.game().clone());
-        let _game = GameService::new(registry.game().clone());
+        let devices = DeviceService::new(registry.devices().clone());
 
-        Self { game, _game }
+        Self { game, devices }
     }
 
     pub fn game(&self) -> &GameService {
         &self.game
+    }
+
+    pub fn devices(&self) -> &DeviceService {
+        &self.devices
     }
 }

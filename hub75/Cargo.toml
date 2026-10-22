@@ -6,8 +6,8 @@ edition = "2024"
 [dependencies]
 cortex-m = { version = "0.7.6", features = [], optional = true }
 cortex-m-rt =  { version = "0.7.0", features = [], optional = true }
-defmt = { version = "1.1.0", features = [] }
-defmt-rtt = { version = "1.0.0", features = [] }
+defmt = { version = "1.1.0", features = [], optional = true }
+defmt-rtt = { version = "1.0.0", features = [], optional = true }
 embassy-rp = { version = "0.10.0", features = [], optional = true }
 
 [features]
@@ -15,6 +15,8 @@ default = []
 rp235x = [
     "dep:cortex-m",
     "dep:cortex-m-rt",
+    "dep:defmt",
+    "dep:defmt-rtt",
     "dep:embassy-rp",
     # "cortex-m:inline-asm",
     "embassy-rp/rp235xa",

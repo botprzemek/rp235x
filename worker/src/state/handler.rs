@@ -103,7 +103,7 @@ impl Handler for Machine {
     }
 }
 
-use net::{ClientPacket, event::ClientEvent};
+use net::{ClientPacket, Device, DeviceType, event::ClientEvent};
 #[embassy_executor::task]
 pub async fn udp_task(stack: Stack<'static>) {
     let rx_buffer = X_UDP_RX_BUFFER.init([0; 512]);
@@ -119,6 +119,11 @@ pub async fn udp_task(stack: Stack<'static>) {
         return;
     }
 
+    let config = Config::read().unwrap();
+    let device_bytes = Device::from_config(DeviceType::Worker, config)
+        .unwrap()
+        .to_bytes();
+
     let broadcast_endpoint =
         embassy_net::IpEndpoint::new(embassy_net::IpAddress::v4(255, 255, 255, 255), 9000);
 
@@ -129,8 +134,7 @@ pub async fn udp_task(stack: Stack<'static>) {
         let mut master_endpoint: Option<embassy_net::IpEndpoint> = None;
 
         while master_endpoint.is_none() {
-            let mocked_data = [0u8; 27];
-            let client_packet = ClientPacket::new(ClientEvent::HandshakeRequest, 0, mocked_data);
+            let client_packet = ClientPacket::new(ClientEvent::HandshakeRequest, 0, device_bytes);
             let packet_bytes = client_packet.to_bytes();
 
             if let Err(e) = socket.send_to(&packet_bytes, broadcast_endpoint).await {
@@ -208,9 +212,8 @@ pub async fn udp_task(stack: Stack<'static>) {
                     }
                 },
                 embassy_futures::select::Either::Second(_) => {
-                    let mocked_data = [0u8; 27];
                     let keepalive_packet =
-                        ClientPacket::new(ClientEvent::GameStart, 0, mocked_data);
+                        ClientPacket::new(ClientEvent::HandshakeHeartbeat, 0, device_bytes);
                     let packet_bytes = keepalive_packet.to_bytes();
 
                     if let Err(e) = socket.send_to(&packet_bytes, master_endpoint).await {

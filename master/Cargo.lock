@@ -226,6 +226,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "config"
+version = "0.1.0"
+
+[[package]]
 name = "console_error_panic_hook"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -777,6 +781,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "basketball",
+ "config",
  "futures",
  "gloo-net 0.7.0",
  "mime_guess",
@@ -1188,6 +1193,7 @@ dependencies = [
  "basketball",
  "bincode 1.3.3",
  "bytes",
+ "config",
  "futures",
  "gloo-net 0.7.0",
  "hmi",
@@ -1252,6 +1258,7 @@ dependencies = [
 name = "net"
 version = "0.1.0"
 dependencies = [
+ "config",
  "serde",
 ]
 

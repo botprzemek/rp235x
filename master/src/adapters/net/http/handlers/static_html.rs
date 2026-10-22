@@ -5,7 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use hmi::App;
+use hmi::websocket_test::App;
 use rust_embed::RustEmbed;
 use yew::ServerRenderer;
 

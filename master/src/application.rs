@@ -1,11 +1,10 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use net::WebSocketTransport;
 use tokio::net::{TcpListener, UdpSocket};
 
 use crate::adapters::data::ReDBProvider;
-use crate::adapters::net::{TungsteniteAdapter, WebDriver, WorkerDriver};
+use crate::adapters::net::{WebDriver, WorkerDriver};
 use crate::adapters::repositories::Registry;
 use crate::services::Services;
 
@@ -41,7 +40,7 @@ impl<HTTP, UDP> GracefulShutdown for Application<HTTP, UDP> {
 
     async fn terminate() {
         #[cfg(not(unix))]
-        std::future::pending::<()>();
+        std::future::pending::<()>().await;
 
         #[cfg(unix)]
         tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
@@ -92,16 +91,15 @@ impl<HTTP, UDP> Application<HTTP, UDP> {
         let registry = Registry::new(database);
         let services = Arc::new(Services::new(registry));
 
-        let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+        if let Some(http_address) = &self.http_address {
+            let listener = TcpListener::bind(http_address).await.unwrap();
+            WebDriver::new(listener).spawn(Arc::clone(&services));
+        }
 
-        let (stream, remote_address) = listener.accept().await.unwrap();
-
-        let stream = tokio_tungstenite::accept_async(stream).await.unwrap();
-        let adapter = TungsteniteAdapter::new(stream);
-
-        let transport = WebSocketTransport::new(adapter, Some(remote_address));
-
-        crate::adapters::net::run(transport, services).await;
+        if let Some(udp_address) = &self.udp_address {
+            let socket = UdpSocket::bind(udp_address).await.unwrap();
+            WorkerDriver::new(socket).spawn(Arc::clone(&services));
+        }
 
         Self::shutdown().await;
     }

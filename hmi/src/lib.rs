@@ -5,8 +5,7 @@ mod display;
 mod navigation;
 
 use basketball::{Game, Quarter, Scorable, State};
-use futures::StreamExt;
-use gloo_net::websocket::{Message, futures::WebSocket};
+use gloo_net::websocket::futures::WebSocket;
 use std::time::Duration;
 use yew::platform::spawn_local;
 use yew::platform::time::sleep;
@@ -60,7 +59,7 @@ impl Component for ScoreboardComponent {
 
         spawn_local(async move {
             loop {
-                let ws = match WebSocket::open(&ws_url) {
+                let _ws = match WebSocket::open(&ws_url) {
                     Ok(ws) => ws,
                     Err(e) => {
                         println!("{}", e);

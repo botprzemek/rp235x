@@ -1,15 +1,13 @@
 use net::{ClientPacket, ServerPacket};
 
-use crate::{
-    Discipline, Quarter, Scorable, Score, State, Team,
-    layout::{self, DATA_SIZE},
-};
+use crate::{Discipline, Quarter, Scorable, Score, State, Team, layout};
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Game {
+    id: u16,
     state: State,
     discipline: Discipline,
     quarter: Quarter,
@@ -57,9 +55,14 @@ impl Scorable for Game {
 
 impl Game {
     pub fn new(discipline: Discipline) -> Self {
+        Self::with_id(1, discipline)
+    }
+
+    pub fn with_id(id: u16, discipline: Discipline) -> Self {
         let (quarter, regulation_millis, clock_millis) = discipline.map();
 
         Self {
+            id,
             state: State::Idle,
             discipline,
             quarter,
@@ -72,6 +75,7 @@ impl Game {
 
     pub const fn empty() -> Self {
         Self {
+            id: 1,
             state: State::Idle,
             discipline: Discipline::Fiba5vs5,
             quarter: Quarter::Q1,
@@ -80,6 +84,14 @@ impl Game {
             regulation_millis: 0,
             clock_millis: 0,
         }
+    }
+
+    pub fn id(&self) -> u16 {
+        self.id
+    }
+
+    pub fn set_id(&mut self, id: u16) {
+        self.id = id;
     }
 
     pub fn get_state(&self) -> State {
@@ -115,6 +127,7 @@ impl Game {
         let mut away_score = [0u8; 2];
         let mut regulation_millis = [0u8; 4];
         let mut clock_millis = [0u8; 4];
+        let mut id_bytes = [0u8; 2];
 
         home_score.copy_from_slice(&bytes[layout::HOME_SCORE_START..layout::HOME_SCORE_END]);
         away_score.copy_from_slice(&bytes[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END]);
@@ -123,8 +136,13 @@ impl Game {
             &bytes[layout::REGULATION_MILLIS_START..layout::REGULATION_MILLIS_END],
         );
         clock_millis.copy_from_slice(&bytes[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]);
+        id_bytes.copy_from_slice(&bytes[layout::ID_START..layout::ID_END]);
+
+        let raw_id = u16::from_be_bytes(id_bytes);
+        let id = if raw_id == 0 { 1 } else { raw_id };
 
         Ok(Self {
+            id,
             state: State::try_from(bytes[layout::STATE])?,
             discipline: Discipline::try_from(bytes[layout::DISCIPLINE])?,
             quarter: Quarter::try_from(bytes[layout::QUARTER])?,
@@ -148,6 +166,7 @@ impl Game {
         let away_score_bytes = self.away_score.to_be_bytes();
         let regulation_millis_bytes = self.regulation_millis.to_be_bytes();
         let clock_millis_bytes = self.clock_millis.to_be_bytes();
+        let id_bytes = self.id.to_be_bytes();
 
         bytes[layout::HOME_SCORE_START..layout::HOME_SCORE_END].copy_from_slice(&home_score_bytes);
         bytes[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END].copy_from_slice(&away_score_bytes);
@@ -155,6 +174,7 @@ impl Game {
             .copy_from_slice(&regulation_millis_bytes);
         bytes[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]
             .copy_from_slice(&clock_millis_bytes);
+        bytes[layout::ID_START..layout::ID_END].copy_from_slice(&id_bytes);
 
         bytes
     }
