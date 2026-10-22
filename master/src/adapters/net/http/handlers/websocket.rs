@@ -14,17 +14,17 @@ use net::{RawConnection, Transport};
 
 use crate::services::Services;
 
-pub struct AxumWebSocketAdapter {
+pub struct WebSocketAdapter {
     socket: WebSocket,
 }
 
-impl AxumWebSocketAdapter {
+impl WebSocketAdapter {
     pub fn new(socket: WebSocket) -> Self {
         Self { socket }
     }
 }
 
-impl RawConnection for AxumWebSocketAdapter {
+impl RawConnection for WebSocketAdapter {
     async fn send(&mut self, data: &[u8; PACKET_SIZE]) -> Result<(), ()> {
         let payload = Bytes::copy_from_slice(data);
         self.socket
@@ -60,7 +60,7 @@ impl WebsocketHandler {
     }
 
     async fn upgrade(socket: WebSocket, services: Arc<Services>) {
-        let adapter = AxumWebSocketAdapter::new(socket);
+        let adapter = WebSocketAdapter::new(socket);
         let transport = Transport::new(adapter, None);
 
         crate::adapters::net::run(transport, services).await;

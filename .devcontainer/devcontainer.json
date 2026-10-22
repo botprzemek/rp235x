@@ -1,14 +1,13 @@
 {
     "$schema": "https://raw.githubusercontent.com/devcontainers/spec/refs/heads/main/schemas/devContainer.schema.json",
     "name": "rp235x",
-    "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-    "features": {
-        "ghcr.io/devcontainers/features/rust:1": {},
+    "build": {
+        "dockerfile": "Dockerfile"
     },
-    "postStartCommand": "git config --global sequence.editor \"code --wait\" && rustup target add thumbv8m.main-none-eabihf && rustup component add llvm-tools && cargo install --locked cargo-binutils cargo-watch flip-link trunk",
-    "remoteUser": "vscode",
+    "remoteUser": "root",
     "mounts": [
-        "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.ssh,target=/root/.ssh,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached",
     ],
     "customizations": {
         "vscode": {
@@ -17,11 +16,12 @@
                 "dustypomerleau.rust-syntax",
                 "esbenp.prettier-vscode",
                 "fill-labs.dependi",
+                "Google.google-antigravity",
                 "ms-vscode.vscode-serial-monitor",
                 "littensy.charmed-icons",
                 "rust-lang.rust-analyzer",
                 "tamasfe.even-better-toml",
-                "vadimcn.vscode-lldb",
+                "vadimcn.vscode-lldb"
             ],
             "settings": {
                 "editor.detectIndentation": false,
