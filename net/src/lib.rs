@@ -10,8 +10,8 @@ pub use data::{Device, DeviceType};
 pub use event::{ClientEvent, ServerEvent};
 pub use packet::{ClientPacket, Packet, ServerPacket};
 pub use transport::{
-    PacketReceiver, PacketSender, RawConnection, SplitTransport, Transport,
-    RawConnection as WebSocketConnection, Transport as WebSocketTransport,
+    PacketReceiver, PacketSender, RawConnection, RawConnection as WebSocketConnection,
+    SplitTransport, Transport, Transport as WebSocketTransport,
 };
 
 extern crate alloc;

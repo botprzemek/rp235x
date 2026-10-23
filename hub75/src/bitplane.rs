@@ -2,6 +2,12 @@ pub struct BitplaneBuffer<const WIDTH: usize, const HALF_HEIGHT: usize> {
     pub data: [[[u8; WIDTH]; 8]; HALF_HEIGHT],
 }
 
+impl<const WIDTH: usize, const HALF_HEIGHT: usize> Default for BitplaneBuffer<WIDTH, HALF_HEIGHT> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const WIDTH: usize, const HALF_HEIGHT: usize> BitplaneBuffer<WIDTH, HALF_HEIGHT> {
     pub const fn new() -> Self {
         Self {

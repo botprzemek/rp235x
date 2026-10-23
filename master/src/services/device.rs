@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+
 use config::{ConfigError, DeviceConfig};
-use net::Device;
+use net::{Device, DeviceType};
 use tokio::sync::{broadcast, watch};
 
 use crate::{
@@ -9,8 +12,10 @@ use crate::{
 
 #[derive(Clone)]
 pub struct DeviceService {
+    #[allow(dead_code)]
     device_repository: DeviceRepository,
     state: watch::Sender<Vec<Device>>,
+    assigned_games: Arc<RwLock<HashMap<String, u16>>>,
     broadcast: broadcast::Sender<Vec<Device>>,
     disconnect_tx: broadcast::Sender<String>,
     game_assign_tx: broadcast::Sender<(String, u16)>,
@@ -29,14 +34,36 @@ impl Observable<Vec<Device>> for DeviceService {
 impl DeviceService {
     pub fn new(device_repository: DeviceRepository) -> Self {
         device_repository.upsert(Vec::new());
-        let (state, _state_rx) = watch::channel(device_repository.select());
-        let (broadcast, _broadcast_rx) = broadcast::channel(100);
-        let (disconnect_tx, _disconnect_rx) = broadcast::channel(100);
-        let (game_assign_tx, _game_assign_rx) = broadcast::channel(100);
+        let (state, mut state_rx) = watch::channel(device_repository.select());
+        let (broadcast, _broadcast_rx) = broadcast::channel(4096);
+        let (disconnect_tx, _disconnect_rx) = broadcast::channel(4096);
+        let (game_assign_tx, _game_assign_rx) = broadcast::channel(4096);
+        let assigned_games = Arc::new(RwLock::new(HashMap::new()));
+
+        // Asynchroniczny zapis do ReDB w tle (bez blokowania wątków Tokio podczas rejestracji)
+        let repo_writer = device_repository.clone();
+        tokio::spawn(async move {
+            let mut db_interval = tokio::time::interval(std::time::Duration::from_millis(250));
+            db_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                if state_rx.changed().await.is_err() {
+                    break;
+                }
+                db_interval.tick().await;
+                let snapshot = state_rx.borrow_and_update().clone();
+                let repo = repo_writer.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    repo.upsert(snapshot);
+                })
+                .await;
+            }
+        });
 
         Self {
             device_repository,
             state,
+            assigned_games,
             broadcast,
             disconnect_tx,
             game_assign_tx,
@@ -48,6 +75,12 @@ impl DeviceService {
     }
 
     pub fn get_game_id_by_serial(&self, serial_number: &str) -> Option<u16> {
+        if let Some(&gid) = self.assigned_games.read().unwrap().get(serial_number)
+            && gid != 0
+        {
+            return Some(gid);
+        }
+
         self.state
             .borrow()
             .iter()
@@ -64,8 +97,12 @@ impl DeviceService {
     }
 
     pub fn assign_game_by_serial(&self, serial_number: &str, game_id: u16) -> Option<Device> {
+        self.assigned_games
+            .write()
+            .unwrap()
+            .insert(serial_number.to_string(), game_id);
+
         let mut updated_device = None;
-        let mut updated_list = Vec::new();
 
         self.state.send_modify(|devices| {
             if let Some(existing) = devices
@@ -74,22 +111,18 @@ impl DeviceService {
             {
                 existing.set_game_id(game_id);
                 updated_device = Some(*existing);
+            } else if let Ok(stub) =
+                Device::with_game_id(DeviceType::Worker, game_id, serial_number, "pending")
+            {
+                devices.push(stub);
+                updated_device = Some(stub);
             }
-            updated_list = devices.clone();
         });
 
         if updated_device.is_some() {
-            let repo = self.device_repository.clone();
-            let snapshot = updated_list.clone();
-            tokio::task::spawn_blocking(move || {
-                repo.upsert(snapshot);
-            });
-
-            if self.broadcast.receiver_count() > 0 {
-                let _ = self.broadcast.send(updated_list);
-            }
-
-            let _ = self.game_assign_tx.send((serial_number.to_string(), game_id));
+            let _ = self
+                .game_assign_tx
+                .send((serial_number.to_string(), game_id));
         }
 
         updated_device
@@ -105,7 +138,6 @@ impl DeviceService {
             return Err(ConfigError::Serialization);
         }
 
-        let mut updated = Vec::new();
         self.state.send_modify(|devices| {
             if let Some(existing) = devices
                 .iter_mut()
@@ -115,20 +147,7 @@ impl DeviceService {
             } else {
                 devices.push(device);
             }
-            updated = devices.clone();
         });
-
-        let repo = self.device_repository.clone();
-        let snapshot = updated.clone();
-        tokio::task::spawn_blocking(move || {
-            repo.upsert(snapshot);
-        });
-
-        if self.broadcast.receiver_count() > 0
-            && let Err(error) = self.broadcast.send(updated)
-        {
-            eprintln!("ERROR: Failed to broadcast devices: {}", error);
-        }
 
         Ok(device)
     }
@@ -145,20 +164,8 @@ impl DeviceService {
     }
 
     fn remove_by_serial(&self, serial_number: &str) {
-        let mut updated = Vec::new();
         self.state.send_modify(|devices| {
             devices.retain(|d| d.get_serial_number() != Ok(serial_number));
-            updated = devices.clone();
         });
-
-        let repo = self.device_repository.clone();
-        let snapshot = updated.clone();
-        tokio::task::spawn_blocking(move || {
-            repo.upsert(snapshot);
-        });
-
-        if self.broadcast.receiver_count() > 0 {
-            let _ = self.broadcast.send(updated);
-        }
     }
 }

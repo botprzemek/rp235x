@@ -80,6 +80,7 @@ impl ClientHandler for HmiClientHandler {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 const SERIAL_NUMBER_STORAGE_KEY: &str = "hmi_serial_number";
 
 fn load_or_create_browser_device() -> Device {
@@ -379,10 +380,7 @@ pub fn app() -> Html {
                                     }
                                 }
 
-                                current = match packet_rx.try_recv() {
-                                    Ok(next_pkt) => Some(next_pkt),
-                                    _ => None,
-                                };
+                                current = packet_rx.try_recv().ok();
                             }
 
                             if devices_changed {

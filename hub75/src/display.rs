@@ -108,26 +108,4 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>
     pub fn bitplanes(&self) -> &BitplaneBuffer<WIDTH, HALF_HEIGHT> {
         &self.bitplanes
     }
-
-    pub fn draw_animated_text(
-        &mut self,
-        color: Color,
-        home: &str,
-        guest: &str,
-        quarter: &str,
-        clock: &str,
-    ) {
-        self.clear();
-
-        let home_x = 3;
-        let guest_x = (WIDTH as i32) - 26;
-        let quarter_x = 3;
-        let clock_x = 22;
-
-        self.draw_text(home, home_x, 3, color);
-        self.draw_text(guest, guest_x, 3, color);
-        self.draw_text(quarter, quarter_x, 20, color);
-        self.draw_text(clock, clock_x, 20, color);
-        self.prepare_bitplanes();
-    }
 }

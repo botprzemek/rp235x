@@ -11,6 +11,12 @@ pub struct ReDBProvider {
     connection: Arc<Database>,
 }
 
+impl Default for ReDBProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReDBProvider {
     pub fn new() -> Self {
         let database_path = Path::new("master.redb");

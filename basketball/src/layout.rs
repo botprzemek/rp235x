@@ -1,4 +1,4 @@
-pub const DATA_SIZE: usize = 27;
+pub const DATA_SIZE: usize = net::layout::DATA_SIZE;
 
 pub const STATE: usize = 0x00;
 pub const DISCIPLINE: usize = 0x01;

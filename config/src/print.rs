@@ -1,10 +1,13 @@
-use crate::{Config, ConfigError, DeviceConfig};
+use crate::Config;
 
 #[cfg(feature = "std")]
-use crate::NetworkConfig;
+use crate::{ConfigError, DeviceConfig, NetworkConfig};
 
 #[cfg(feature = "std")]
 use std::{format, println};
+
+#[cfg(feature = "defmt")]
+use crate::{ConfigError, DeviceConfig};
 
 #[cfg(feature = "defmt")]
 use defmt::info;

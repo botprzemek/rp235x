@@ -1,4 +1,4 @@
-use crate::LedOutputs;
+use crate::{LedOutputs, OutputPin};
 
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::{Peri, peripherals};
@@ -20,6 +20,16 @@ pub struct LedPeripherals {
     pub clk: Peri<'static, peripherals::PIN_11>,
     pub lat: Peri<'static, peripherals::PIN_12>,
     pub oe: Peri<'static, peripherals::PIN_13>,
+}
+
+impl<'a> OutputPin for Output<'a> {
+    fn set_high(&mut self) {
+        self.set_high();
+    }
+
+    fn set_low(&mut self) {
+        self.set_low();
+    }
 }
 
 impl From<LedPeripherals> for LedOutputs<Output<'static>> {

@@ -31,6 +31,12 @@ trait GracefulShutdown {
     async fn shutdown() -> ();
 }
 
+impl Default for ApplicationBuilder<Absent, Absent> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<HTTP, UDP> GracefulShutdown for Application<HTTP, UDP> {
     async fn ctrl_c() {
         tokio::signal::ctrl_c()
@@ -86,7 +92,7 @@ impl<HTTP, UDP> Application<HTTP, UDP> {
         }
     }
 
-    pub async fn run(self) {
+    pub async fn start(self) -> Arc<Services> {
         let database = ReDBProvider::new();
         let registry = Registry::new(database);
         let services = Arc::new(Services::new(registry));
@@ -101,6 +107,11 @@ impl<HTTP, UDP> Application<HTTP, UDP> {
             WorkerDriver::new(socket).spawn(Arc::clone(&services));
         }
 
+        services
+    }
+
+    pub async fn run(self) {
+        let _ = self.start().await;
         Self::shutdown().await;
     }
 }

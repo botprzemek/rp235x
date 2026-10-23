@@ -46,6 +46,7 @@ impl Device {
             DeviceType::Worker => 0,
             DeviceType::WebBrowser => 1,
         };
+
         Self::with_game_id(device_type, default_game_id, serial_number, device_id)
     }
 
@@ -120,7 +121,7 @@ impl Device {
     }
 
     pub fn from_bytes(buffer: &[u8]) -> Result<Self, &'static str> {
-        if buffer.len() < layout::DATA_SIZE {
+        if buffer.len() < layout::DEVICE_ID_END {
             return Err("device_length");
         }
 

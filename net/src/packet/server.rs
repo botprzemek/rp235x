@@ -1,5 +1,8 @@
 use crate::{ServerEvent, layout};
 
+#[cfg(feature = "serde")]
+use crate::packet::serialize_data;
+
 static PACKET_MAGIC: u8 = 0x42;
 static PACKET_VERSION: u8 = 0x01;
 
@@ -12,6 +15,7 @@ pub struct ServerPacket {
     event: ServerEvent,
     sequence_id: u8,
     version: u8,
+    #[cfg_attr(feature = "serde", serde(serialize_with = "serialize_data"))]
     data: [u8; layout::DATA_SIZE],
     crc: u8,
 }

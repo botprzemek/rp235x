@@ -1,3 +1,4 @@
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use basketball::{Discipline, Game, Scorable, Score, State, Team};
@@ -12,8 +13,10 @@ const TICK_RATE: Duration = Duration::from_nanos(1_000_000_000 / 60);
 
 #[derive(Clone)]
 pub struct GameService {
+    #[allow(dead_code)]
     game_repository: GameRepository,
     state: watch::Sender<Vec<Game>>,
+    cache: Arc<RwLock<Vec<Option<Game>>>>,
     broadcast: broadcast::Sender<Vec<Game>>,
 }
 
@@ -36,8 +39,16 @@ impl GameService {
             game_repository.upsert(initial_games.clone());
         }
 
+        let mut cache_vec: Vec<Option<Game>> = vec![None; 2048];
+        for g in &initial_games {
+            if (g.id() as usize) < cache_vec.len() {
+                cache_vec[g.id() as usize] = Some(*g);
+            }
+        }
+        let cache = Arc::new(RwLock::new(cache_vec));
+
         let (state, mut state_rx) = watch::channel(initial_games);
-        let (broadcast, _broadcast_rx) = broadcast::channel(100);
+        let (broadcast, _broadcast_rx) = broadcast::channel(4096);
 
         // Asynchroniczny zapis do ReDB w tle (bez blokowania pętli czasu rzeczywistego 60 Hz)
         let repo_writer = game_repository.clone();
@@ -60,7 +71,7 @@ impl GameService {
         });
 
         // Niezależny zegar czasu rzeczywistego (Instant::now()) 60 Hz dla wszystkich aktywnych gier
-        let clock_state = state.clone();
+        let clock_cache = Arc::clone(&cache);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(TICK_RATE);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -69,25 +80,27 @@ impl GameService {
             loop {
                 interval.tick().await;
                 let now = Instant::now();
-                let elapsed = now.duration_since(last_instant);
+                // Ograniczenie catch-up w przypadku chwilowego przeciążenia schedulera
+                let elapsed = now
+                    .duration_since(last_instant)
+                    .min(Duration::from_millis(50));
                 last_instant = now;
 
-                clock_state.send_if_modified(|games| {
-                    let mut any_running = false;
-                    for game in games.iter_mut() {
-                        if game.get_state() == State::Running {
-                            game.tick(elapsed);
-                            any_running = true;
-                        }
+                let mut games = clock_cache.write().unwrap();
+                for game in games.iter_mut().flatten() {
+                    if game.get_state() != State::Running {
+                        continue;
                     }
-                    any_running
-                });
+
+                    game.tick(elapsed);
+                }
             }
         });
 
         Self {
             game_repository,
             state,
+            cache,
             broadcast,
         }
     }
@@ -97,14 +110,12 @@ impl GameService {
     }
 
     pub fn get_by_id(&self, id: u16) -> Option<Game> {
-        self.state.borrow().iter().find(|g| g.id() == id).copied()
+        let cache = self.cache.read().unwrap();
+        cache.get(id as usize).copied().flatten()
     }
 
     pub fn get(&self) -> Game {
-        self.state
-            .borrow()
-            .first()
-            .copied()
+        self.get_by_id(1)
             .unwrap_or_else(|| Game::with_id(1, Discipline::Fiba5vs5))
     }
 
@@ -124,11 +135,12 @@ impl GameService {
             snapshot = games.clone();
         });
 
-        let repo = self.game_repository.clone();
-        let to_save = snapshot.clone();
-        tokio::task::spawn_blocking(move || {
-            repo.upsert(to_save);
-        });
+        {
+            let mut cache = self.cache.write().unwrap();
+            if (created.id() as usize) < cache.len() {
+                cache[created.id() as usize] = Some(created);
+            }
+        }
 
         if self.broadcast.receiver_count() > 0 {
             let _ = self.broadcast.send(snapshot);
@@ -155,11 +167,12 @@ impl GameService {
             snapshot = games.clone();
         });
 
-        let repo = self.game_repository.clone();
-        let to_save = snapshot.clone();
-        tokio::task::spawn_blocking(move || {
-            repo.upsert(to_save);
-        });
+        if let Some(game) = updated_game {
+            let mut cache = self.cache.write().unwrap();
+            if (game.id() as usize) < cache.len() {
+                cache[game.id() as usize] = Some(game);
+            }
+        }
 
         if self.broadcast.receiver_count() > 0
             && let Err(error) = self.broadcast.send(snapshot)

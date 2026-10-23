@@ -1,53 +1,8 @@
-use crate::bitplane::BitplaneBuffer;
-
-use embassy_rp::gpio::Output;
-
-pub trait OutputPin {
-    fn set_high(&mut self);
-    fn set_low(&mut self);
-
-    #[inline(always)]
-    fn set_level(&mut self, high: bool) {
-        if high {
-            self.set_high();
-        } else {
-            self.set_low();
-        }
-    }
-}
-
-impl<'a> OutputPin for Output<'a> {
-    fn set_high(&mut self) {
-        self.set_high();
-    }
-
-    fn set_low(&mut self) {
-        self.set_low();
-    }
-}
-
-pub struct LedOutputs<Output> {
-    pub r1: Output,
-    pub g1: Output,
-    pub b1: Output,
-    pub r2: Output,
-    pub g2: Output,
-    pub b2: Output,
-
-    pub a: Output,
-    pub b: Output,
-    pub c: Output,
-    pub d: Output,
-    pub _e: Output,
-
-    pub clk: Output,
-    pub lat: Output,
-    pub oe: Output,
-}
+use crate::{BitplaneBuffer, LedOutputs, OutputPin};
 
 impl<Output: OutputPin> LedOutputs<Output> {
     #[inline(always)]
-    fn set_row(&mut self, row: u8) {
+    pub fn set_row(&mut self, row: u8) {
         self.a.set_level((row & 0x01) != 0);
         self.b.set_level((row & 0x02) != 0);
         self.c.set_level((row & 0x04) != 0);
@@ -56,7 +11,7 @@ impl<Output: OutputPin> LedOutputs<Output> {
     }
 
     #[inline(always)]
-    fn clock_out_fast(&mut self, bitplane: &[u8]) {
+    pub fn clock_out_fast(&mut self, bitplane: &[u8]) {
         for &mask in bitplane.iter() {
             self.r1.set_level((mask & (1 << 0)) != 0);
             self.g1.set_level((mask & (1 << 1)) != 0);
@@ -86,13 +41,18 @@ impl<Output: OutputPin> LedOutputs<Output> {
                 self.set_row(row as u8);
 
                 self.lat.set_high();
-                cortex_m::asm::delay(10);
+                Self::delay(10);
                 self.lat.set_low();
 
                 self.oe.set_low();
-                cortex_m::asm::delay(cycles);
+                Self::delay(cycles);
                 self.oe.set_high();
             }
         }
+    }
+
+    fn delay(_cycles: u32) {
+        #[cfg(feature = "rp235x")]
+        cortex_m::asm::delay(_cycles);
     }
 }

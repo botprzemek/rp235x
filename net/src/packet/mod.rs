@@ -5,7 +5,10 @@ pub use client::ClientPacket;
 pub use server::ServerPacket;
 
 use crate::event::{ClientEvent, ServerEvent};
-use crate::layout::{DATA_SIZE, PACKET_SIZE};
+use crate::layout;
+
+#[cfg(feature = "serde")]
+use serde::{Serializer, ser::SerializeTuple};
 
 pub trait Packet: Sized + Copy + Send + Sync {
     type Event: Copy + Send + Sync;
@@ -13,9 +16,9 @@ pub trait Packet: Sized + Copy + Send + Sync {
     fn event(&self) -> Self::Event;
     fn sequence_id(&self) -> u8;
     fn version(&self) -> u8;
-    fn data(self) -> [u8; DATA_SIZE];
-    fn to_bytes(&self) -> [u8; PACKET_SIZE];
-    fn from_bytes(buffer: [u8; PACKET_SIZE]) -> Result<Self, &'static str>;
+    fn data(self) -> [u8; layout::DATA_SIZE];
+    fn to_bytes(&self) -> [u8; layout::PACKET_SIZE];
+    fn from_bytes(buffer: [u8; layout::PACKET_SIZE]) -> Result<Self, &'static str>;
 }
 
 impl Packet for ClientPacket {
@@ -33,15 +36,15 @@ impl Packet for ClientPacket {
         ClientPacket::version(self)
     }
 
-    fn data(self) -> [u8; DATA_SIZE] {
+    fn data(self) -> [u8; layout::DATA_SIZE] {
         ClientPacket::data(self)
     }
 
-    fn to_bytes(&self) -> [u8; PACKET_SIZE] {
+    fn to_bytes(&self) -> [u8; layout::PACKET_SIZE] {
         ClientPacket::to_bytes(self)
     }
 
-    fn from_bytes(buffer: [u8; PACKET_SIZE]) -> Result<Self, &'static str> {
+    fn from_bytes(buffer: [u8; layout::PACKET_SIZE]) -> Result<Self, &'static str> {
         ClientPacket::from_bytes(buffer)
     }
 }
@@ -61,15 +64,29 @@ impl Packet for ServerPacket {
         ServerPacket::version(self)
     }
 
-    fn data(self) -> [u8; DATA_SIZE] {
+    fn data(self) -> [u8; layout::DATA_SIZE] {
         ServerPacket::data(self)
     }
 
-    fn to_bytes(&self) -> [u8; PACKET_SIZE] {
+    fn to_bytes(&self) -> [u8; layout::PACKET_SIZE] {
         ServerPacket::to_bytes(self)
     }
 
-    fn from_bytes(buffer: [u8; PACKET_SIZE]) -> Result<Self, &'static str> {
+    fn from_bytes(buffer: [u8; layout::PACKET_SIZE]) -> Result<Self, &'static str> {
         ServerPacket::from_bytes(buffer)
     }
+}
+
+#[cfg(feature = "serde")]
+pub fn serialize_data<S>(data: &[u8; layout::DATA_SIZE], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut tuple = serializer.serialize_tuple(layout::DATA_SIZE)?;
+
+    for byte in data {
+        tuple.serialize_element(byte)?;
+    }
+
+    tuple.end()
 }

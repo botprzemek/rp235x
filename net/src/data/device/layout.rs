@@ -1,4 +1,4 @@
-pub const DATA_SIZE: usize = 27;
+pub const DATA_SIZE: usize = crate::layout::DATA_SIZE;
 pub const SERIAL_NUMBER_SIZE: usize = 12;
 pub const DEVICE_ID_SIZE: usize = 12;
 

@@ -1,6 +1,9 @@
+mod layout;
+
+pub use layout::ScoreboardLayout;
+
 use crate::state::handler::CORE1_READY_SIGNAL;
 use crate::{peripherals::LedPeripherals, state::GAME_STATE};
-use basketball::{Scorable, Team};
 use defmt::unwrap;
 use embassy_executor::{Executor, Spawner};
 use static_cell::StaticCell;
@@ -25,11 +28,7 @@ impl Core1 {
 async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
     let mut outputs = hub75::LedOutputs::from(peripherals);
     let mut display = hub75::DisplayBuffer::<64, 32, 16>::default();
-
-    let mut home_str = heapless::String::<8>::new();
-    let mut guest_str = heapless::String::<8>::new();
-    let mut quarter_str = heapless::String::<8>::new();
-    let mut clock_str = heapless::String::<8>::new();
+    let mut layout = ScoreboardLayout::new();
 
     let start_instant = embassy_time::Instant::now().as_millis();
 
@@ -39,33 +38,10 @@ async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
             *game_ref.borrow()
         };
 
-        home_str.clear();
-        guest_str.clear();
-        quarter_str.clear();
-        clock_str.clear();
-
-        let total_seconds = game.regulation_millis() / 1000;
-        let minutes = total_seconds / 60;
-        let seconds = total_seconds % 60;
-
-        let _ = core::fmt::write(
-            &mut home_str,
-            format_args!("{:03}", game.get_score(Team::Home)),
-        );
-        let _ = core::fmt::write(
-            &mut guest_str,
-            format_args!("{:03}", game.get_score(Team::Away)),
-        );
-        let _ = core::fmt::write(&mut quarter_str, format_args!("{:?}", game.quarter()));
-        let _ = core::fmt::write(
-            &mut clock_str,
-            format_args!("{:02}:{:02}", minutes, seconds),
-        );
-
         let phase_hue = ((start_instant % 10_000) * 360 / 10_000) as u16;
         let color = hub75::hue_to_rgb(phase_hue);
 
-        display.draw_animated_text(color, &home_str, &guest_str, &quarter_str, &clock_str);
+        layout.render(&mut display, &game, color);
         outputs.render_bcm_frame_sync(display.bitplanes());
 
         embassy_futures::yield_now().await;
