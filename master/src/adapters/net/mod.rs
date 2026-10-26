@@ -1,22 +1,20 @@
+mod connection;
 mod http;
 mod udp;
 
 use core::net::SocketAddr;
-use core::time::Duration;
 use std::sync::Arc;
 
-use basketball::{Discipline, Game, Scorable, Score, Team};
+use basketball::{Discipline, Game, Score, Team};
 use config::DeviceConfig;
+pub use connection::{Session, run};
 pub use http::WebDriver;
 use net::{
-    ClientEvent, ClientPacket, Device, DeviceType, NetError, PacketReceiver, PacketSender, Server,
-    ServerEvent, ServerHandler, ServerPacket,
+    ClientEvent, ClientPacket, Device, DeviceType, ServerEvent, ServerHandler, ServerPacket,
 };
 pub use udp::WorkerDriver;
 
-use crate::services::{Observable, Services};
-
-const TICK_DURATION: Duration = Duration::from_nanos(1_000_000_000 / 60);
+use crate::services::Services;
 
 pub struct MasterServerHandler {
     services: Arc<Services>,
@@ -53,6 +51,21 @@ impl MasterServerHandler {
     #[allow(dead_code)]
     pub fn selected_game_id(&self) -> u16 {
         self.selected_game_id
+    }
+
+    /// Snapshot of the connection state consumed by the outbound task.
+    pub fn session(&self) -> Session {
+        Session {
+            validated: self.is_validated(),
+            browser: self.is_web_browser(),
+            game_id: self.selected_game_id,
+        }
+    }
+
+    /// Whether this connection belongs to the device with the given serial number.
+    pub fn is_device(&self, serial_number: &str) -> bool {
+        self.validated_device
+            .is_some_and(|dev| dev.get_serial_number() == Ok(serial_number))
     }
 
     pub fn set_selected_game_id(&mut self, game_id: u16) {
@@ -314,247 +327,6 @@ impl ServerHandler for MasterServerHandler {
                 }
 
                 None
-            }
-        }
-    }
-}
-
-async fn sync_devices_to_browser<T>(
-    server: &mut Server<T, MasterServerHandler>,
-    known_devices: &mut Vec<Device>,
-    current_devices: Vec<Device>,
-    sequence_id: &mut u8,
-) where
-    T: PacketSender + PacketReceiver,
-{
-    for previous in known_devices.iter() {
-        let still_present = current_devices
-            .iter()
-            .any(|d| d.get_serial_number() == previous.get_serial_number());
-        if !still_present {
-            *sequence_id = sequence_id.wrapping_add(1);
-            let packet = ServerPacket::new(
-                ServerEvent::DeviceDisconnect,
-                *sequence_id,
-                previous.to_bytes(),
-            );
-            server.send(&packet).await;
-        }
-    }
-
-    for device in current_devices.iter() {
-        let already_sent = known_devices.iter().any(|d| d == device);
-        if !already_sent {
-            *sequence_id = sequence_id.wrapping_add(1);
-            let packet =
-                ServerPacket::new(ServerEvent::DeviceUpdate, *sequence_id, device.to_bytes());
-            server.send(&packet).await;
-        }
-    }
-
-    *known_devices = current_devices;
-}
-
-async fn sync_games_to_browser<T>(
-    server: &mut Server<T, MasterServerHandler>,
-    known_games: &mut Vec<Game>,
-    current_games: Vec<Game>,
-    sequence_id: &mut u8,
-) where
-    T: PacketSender + PacketReceiver,
-{
-    for game in current_games.iter() {
-        let unchanged = known_games.iter().any(|g| {
-            g.id() == game.id()
-                && g.get_scores() == game.get_scores()
-                && g.get_state() == game.get_state()
-                && g.get_quarter() == game.get_quarter()
-        });
-        if !unchanged {
-            *sequence_id = sequence_id.wrapping_add(1);
-            let packet =
-                ServerPacket::new(ServerEvent::GameListUpdate, *sequence_id, game.to_bytes());
-            server.send(&packet).await;
-        }
-    }
-
-    *known_games = current_games;
-}
-
-pub async fn run<T>(transport: T, services: Arc<Services>)
-where
-    T: PacketSender + PacketReceiver,
-{
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    static CONNECTION_COUNTER: AtomicUsize = AtomicUsize::new(0);
-    let conn_id = CONNECTION_COUNTER.fetch_add(1, Ordering::Relaxed);
-
-    let handler = MasterServerHandler::new(Arc::clone(&services));
-    let mut server = Server::new(transport, handler);
-
-    let mut sequence_id: u8 = 0;
-    let mut tick_counter: u32 = 0;
-    // Phase jitter: offset start time to avoid thundering herd across hundreds of connections
-    let jitter_micros = (conn_id % 16) as u64 * 1000;
-    let start_instant = tokio::time::Instant::now() + Duration::from_micros(jitter_micros);
-    let mut interval = tokio::time::interval_at(start_instant, TICK_DURATION);
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-
-    let mut game_rx: Option<tokio::sync::watch::Receiver<Vec<Game>>> = None;
-    let mut devices_rx: Option<tokio::sync::watch::Receiver<Vec<Device>>> = None;
-    let mut disconnect_rx = services.devices().subscribe_disconnect();
-    let mut known_devices: Vec<Device> = Vec::new();
-    let mut known_games: Vec<Game> = Vec::new();
-
-    let mut browser_sync_interval = tokio::time::interval(Duration::from_millis(100));
-    browser_sync_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let mut devices_dirty = false;
-    let mut games_dirty = false;
-
-    loop {
-        tokio::select! {
-            res = disconnect_rx.recv() => {
-                if let Ok(target_sn) = res
-                    && let Some(device) = server.handler().validated_device()
-                    && device.get_serial_number() == Ok(target_sn.as_str())
-                {
-                    println!("INFO: Closing WebSocket connection for disconnected device sn={}", target_sn);
-                    break;
-                }
-            }
-
-            _ = interval.tick() => {
-                tick_counter = tick_counter.wrapping_add(1);
-                if tick_counter.is_multiple_of(60) || server.handler().selected_game_id() == 0 {
-                    server.handler_mut().sync_assignment();
-                }
-
-                if server.handler().is_validated()
-                    && let Some(game) = server.handler_mut().selected_game()
-                {
-                    sequence_id = sequence_id.wrapping_add(1);
-                    let packet = ServerPacket::new(
-                        ServerEvent::GameUpdate,
-                        sequence_id,
-                        game.to_bytes(),
-                    );
-                    server.send(&packet).await;
-                }
-                tokio::task::consume_budget().await;
-            }
-
-            res = async {
-                match &mut game_rx {
-                    Some(rx) => rx.changed().await,
-                    None => std::future::pending::<Result<(), tokio::sync::watch::error::RecvError>>().await,
-                }
-            } => {
-                if res.is_ok() {
-                    games_dirty = true;
-                }
-            }
-
-            res = async {
-                match &mut devices_rx {
-                    Some(rx) => rx.changed().await,
-                    None => std::future::pending::<Result<(), tokio::sync::watch::error::RecvError>>().await,
-                }
-            } => {
-                if res.is_ok() {
-                    devices_dirty = true;
-                }
-            }
-
-            _ = browser_sync_interval.tick(), if server.handler().is_web_browser() => {
-                if games_dirty && let Some(rx) = &mut game_rx {
-                    games_dirty = false;
-                    let current_games = rx.borrow_and_update().clone();
-                    if server.handler().is_validated() {
-                        sync_games_to_browser(
-                            &mut server,
-                            &mut known_games,
-                            current_games,
-                            &mut sequence_id,
-                        )
-                        .await;
-                    }
-                }
-
-                if devices_dirty && let Some(rx) = &mut devices_rx {
-                    devices_dirty = false;
-                    let current_devices = rx.borrow_and_update().clone();
-                    sync_devices_to_browser(
-                        &mut server,
-                        &mut known_devices,
-                        current_devices,
-                        &mut sequence_id,
-                    )
-                    .await;
-                }
-            }
-
-            result = server.poll() => {
-                match result {
-                    Ok(packet) => {
-                        if server.handler().is_web_browser() {
-                            if game_rx.is_none() {
-                                game_rx = Some(services.game().watch());
-                            }
-                            if devices_rx.is_none() {
-                                devices_rx = Some(services.devices().watch());
-                            }
-
-                            if matches!(
-                                packet.event(),
-                                ClientEvent::HandshakeRequest | ClientEvent::HandshakeHeartbeat
-                            ) {
-                                if let Some(rx) = &mut devices_rx {
-                                    known_devices.clear();
-                                    let current_devices = rx.borrow_and_update().clone();
-                                    sync_devices_to_browser(
-                                        &mut server,
-                                        &mut known_devices,
-                                        current_devices,
-                                        &mut sequence_id,
-                                    )
-                                    .await;
-                                }
-
-                                if let Some(rx) = &mut game_rx {
-                                    known_games.clear();
-                                    let current_games = rx.borrow_and_update().clone();
-                                    sync_games_to_browser(
-                                        &mut server,
-                                        &mut known_games,
-                                        current_games,
-                                        &mut sequence_id,
-                                    )
-                                    .await;
-                                }
-                            }
-                        }
-                    }
-                    Err(NetError::InvalidPacket(err)) => {
-                        eprintln!("WARN: Invalid client packet: {}", err);
-                    }
-                    Err(NetError::Disconnected) => {
-                        if let Some(device) = server.handler().validated_device() {
-                            if server.handler().is_web_browser() {
-                                println!(
-                                    "INFO: Client disconnected: {:?} (id={}, sn={})",
-                                    device.device_type(),
-                                    device.get_device_id().unwrap_or("unknown"),
-                                    device.get_serial_number().unwrap_or("unknown")
-                                );
-                            }
-                            services.devices().unregister(&device);
-                        } else {
-                            println!("INFO: Unvalidated client disconnected");
-                        }
-                        break;
-                    }
-                }
-                tokio::task::consume_budget().await;
             }
         }
     }

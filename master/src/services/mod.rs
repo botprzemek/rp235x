@@ -2,7 +2,7 @@ mod device;
 mod game;
 
 pub use device::DeviceService;
-pub use game::GameService;
+pub use game::{GameFrame, GameService};
 use tokio::sync::{broadcast, watch};
 
 use crate::adapters::repositories::Registry;

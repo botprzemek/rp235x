@@ -1,10 +1,14 @@
-use std::sync::{
-    Arc, RwLock,
-    atomic::{AtomicBool, Ordering},
-};
 use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 use basketball::{Discipline, Game, Scorable, Score, State, Team};
+use net::{ServerEvent, ServerPacket, layout::PACKET_SIZE};
 use tokio::sync::{broadcast, watch};
 
 use crate::{
@@ -13,6 +17,14 @@ use crate::{
 };
 
 const TICK_RATE: Duration = Duration::from_nanos(1_000_000_000 / 60);
+/// How often (in ticks) frame channels without subscribers are pruned.
+const FRAME_PRUNE_TICKS: u32 = 600;
+
+/// A fully serialized `ServerEvent::GameUpdate` packet, shared by every
+/// connection observing the same game.
+pub type GameFrame = Arc<[u8; PACKET_SIZE]>;
+
+type FrameChannels = Arc<RwLock<HashMap<u16, watch::Sender<Option<GameFrame>>>>>;
 
 #[derive(Clone, Copy)]
 struct ActiveGame {
@@ -69,6 +81,7 @@ pub struct GameService {
     cache: Arc<RwLock<Vec<Option<ActiveGame>>>>,
     db_dirty: Arc<AtomicBool>,
     broadcast: broadcast::Sender<Vec<Game>>,
+    frames: FrameChannels,
 }
 
 impl Observable<Vec<Game>> for GameService {
@@ -99,6 +112,7 @@ impl GameService {
         }
         let cache = Arc::new(RwLock::new(cache_vec));
         let db_dirty = Arc::new(AtomicBool::new(false));
+        let frames: FrameChannels = Arc::new(RwLock::new(HashMap::new()));
 
         let (state, _state_rx) = watch::channel(initial_games);
         let (broadcast, _broadcast_rx) = broadcast::channel(64);
@@ -135,9 +149,12 @@ impl GameService {
         let clock_state = state.clone();
         let clock_broadcast = broadcast.clone();
         let clock_db_dirty = Arc::clone(&db_dirty);
+        let clock_frames = Arc::clone(&frames);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(TICK_RATE);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut sequence_id: u8 = 0;
+            let mut tick_counter: u32 = 0;
 
             loop {
                 interval.tick().await;
@@ -168,6 +185,17 @@ impl GameService {
                         let _ = clock_broadcast.send(snapshot);
                     }
                 }
+
+                Self::publish_frames(&clock_cache, &clock_frames, sequence_id);
+                sequence_id = sequence_id.wrapping_add(1);
+
+                tick_counter = tick_counter.wrapping_add(1);
+                if tick_counter % FRAME_PRUNE_TICKS == 0 {
+                    clock_frames
+                        .write()
+                        .unwrap()
+                        .retain(|_, tx| tx.receiver_count() > 0);
+                }
             }
         });
 
@@ -177,7 +205,50 @@ impl GameService {
             cache,
             db_dirty,
             broadcast,
+            frames: Arc::clone(&frames),
         }
+    }
+
+    /// Serializes every observed game once and publishes the shared frame to
+    /// all of its subscribers.
+    fn publish_frames(
+        cache: &RwLock<Vec<Option<ActiveGame>>>,
+        frames: &RwLock<HashMap<u16, watch::Sender<Option<GameFrame>>>>,
+        sequence_id: u8,
+    ) {
+        let frames = frames.read().unwrap();
+        if frames.is_empty() {
+            return;
+        }
+
+        let cache = cache.read().unwrap();
+        for (&game_id, tx) in frames.iter() {
+            if tx.receiver_count() == 0 {
+                continue;
+            }
+
+            if let Some(entry) = cache.get(game_id as usize).and_then(|entry| entry.as_ref()) {
+                let packet =
+                    ServerPacket::new(ServerEvent::GameUpdate, sequence_id, entry.game.to_bytes());
+                tx.send_replace(Some(Arc::new(packet.to_bytes())));
+            }
+        }
+    }
+
+    /// Subscribes to the 60 Hz stream of pre-serialized `GameUpdate` frames
+    /// for a single game. Frames are latest-value only: slow consumers skip
+    /// stale frames instead of queueing them.
+    pub fn subscribe_frames(&self, game_id: u16) -> watch::Receiver<Option<GameFrame>> {
+        if let Some(tx) = self.frames.read().unwrap().get(&game_id) {
+            return tx.subscribe();
+        }
+
+        self.frames
+            .write()
+            .unwrap()
+            .entry(game_id)
+            .or_insert_with(|| watch::channel(None).0)
+            .subscribe()
     }
 
     pub fn get_all(&self) -> Vec<Game> {

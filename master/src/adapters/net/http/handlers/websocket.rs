@@ -1,3 +1,4 @@
+use core::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::{
@@ -8,45 +9,48 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use futures::stream::StreamExt;
+use futures::{
+    SinkExt,
+    stream::{SplitSink, SplitStream, StreamExt},
+};
 use net::layout::PACKET_SIZE;
-use net::{RawConnection, Transport};
+use net::{PacketReceiver, PacketSender};
 
 use crate::services::Services;
 
-pub struct WebSocketAdapter {
-    socket: WebSocket,
+/// Outbound half of a WebSocket connection.
+pub struct WebSocketSender {
+    sink: SplitSink<WebSocket, Message>,
 }
 
-impl WebSocketAdapter {
-    pub fn new(socket: WebSocket) -> Self {
-        Self { socket }
-    }
-}
-
-impl RawConnection for WebSocketAdapter {
-    async fn send(&mut self, data: &[u8; PACKET_SIZE]) -> Result<(), ()> {
+impl PacketSender for WebSocketSender {
+    async fn send_packet(&mut self, data: &[u8; PACKET_SIZE]) {
         let payload = Bytes::copy_from_slice(data);
-        self.socket
-            .send(Message::Binary(payload))
-            .await
-            .map_err(|_| ())
+        let _ = self.sink.send(Message::Binary(payload)).await;
     }
+}
 
-    async fn receive(&mut self, buffer: &mut [u8; PACKET_SIZE]) -> Result<usize, ()> {
-        while let Some(msg_res) = self.socket.next().await {
+/// Inbound half of a WebSocket connection.
+pub struct WebSocketReceiver {
+    stream: SplitStream<WebSocket>,
+}
+
+impl PacketReceiver for WebSocketReceiver {
+    async fn receive_packet(
+        &mut self,
+    ) -> Result<([u8; PACKET_SIZE], Option<SocketAddr>), &'static str> {
+        while let Some(msg_res) = self.stream.next().await {
             match msg_res {
-                Ok(Message::Binary(bin)) => {
-                    let len = bin.len().min(PACKET_SIZE);
-                    buffer[..len].copy_from_slice(&bin[..len]);
-                    return Ok(len);
+                Ok(Message::Binary(bin)) if bin.len() == PACKET_SIZE => {
+                    let mut buffer = [0u8; PACKET_SIZE];
+                    buffer.copy_from_slice(&bin);
+                    return Ok((buffer, None));
                 }
-                Ok(Message::Close(_)) => return Err(()),
-                Err(_) => return Err(()),
+                Ok(Message::Close(_)) | Err(_) => return Err("disconnected"),
                 _ => continue,
             }
         }
-        Err(())
+        Err("disconnected")
     }
 }
 
@@ -60,10 +64,11 @@ impl WebsocketHandler {
     }
 
     async fn upgrade(socket: WebSocket, services: Arc<Services>) {
-        let adapter = WebSocketAdapter::new(socket);
-        let transport = Transport::new(adapter, None);
+        let (sink, stream) = socket.split();
+        let sender = WebSocketSender { sink };
+        let receiver = WebSocketReceiver { stream };
 
-        crate::adapters::net::run(transport, services).await;
+        crate::adapters::net::run(receiver, sender, services).await;
     }
 
     pub async fn handle(
