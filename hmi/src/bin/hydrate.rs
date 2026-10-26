@@ -1,5 +1,4 @@
-// use hmi::web;
-use hmi::websocket_test::App;
+use hmi::App;
 
 fn main() {
     let app = yew::Renderer::<App>::new();

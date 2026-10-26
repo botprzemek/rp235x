@@ -1,7 +1,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use redb::{Database, TableDefinition};
+use redb::{Builder, Database, TableDefinition};
+
+const DATABASE_CACHE_SIZE: usize = 4 * 1024 * 1024;
 
 pub const GAME_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("games");
 pub const DEVICES_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("devices");
@@ -20,7 +22,10 @@ impl Default for ReDBProvider {
 impl ReDBProvider {
     pub fn new() -> Self {
         let database_path = Path::new("master.redb");
-        let connection = Database::create(database_path).unwrap();
+        let connection = Builder::new()
+            .set_cache_size(DATABASE_CACHE_SIZE)
+            .create(database_path)
+            .unwrap();
         let connection = Arc::new(connection);
 
         {

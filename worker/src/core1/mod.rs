@@ -30,7 +30,7 @@ async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
     let mut display = hub75::DisplayBuffer::<64, 32, 16>::default();
     let mut layout = ScoreboardLayout::new();
 
-    let start_instant = embassy_time::Instant::now().as_millis();
+    display.set_brightness(20);
 
     loop {
         let game = {
@@ -38,8 +38,7 @@ async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
             *game_ref.borrow()
         };
 
-        let phase_hue = ((start_instant % 10_000) * 360 / 10_000) as u16;
-        let color = hub75::hue_to_rgb(phase_hue);
+        let color = hub75::RED;
 
         layout.render(&mut display, &game, color);
         outputs.render_bcm_frame_sync(display.bitplanes());

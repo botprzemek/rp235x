@@ -30,10 +30,21 @@ impl<Output: OutputPin> LedOutputs<Output> {
         &mut self,
         bitplanes: &BitplaneBuffer<WIDTH, HALF_HEIGHT>,
     ) {
+        self.render_bcm_frame_sync_with_brightness(bitplanes, 100);
+    }
+
+    pub fn render_bcm_frame_sync_with_brightness<const WIDTH: usize, const HALF_HEIGHT: usize>(
+        &mut self,
+        bitplanes: &BitplaneBuffer<WIDTH, HALF_HEIGHT>,
+        brightness_percent: u8,
+    ) {
         const BASE_CYCLES: u32 = 50;
+        let brightness_factor = brightness_percent.min(100) as u32;
 
         for bit in 0..8 {
-            let cycles = BASE_CYCLES << bit;
+            let full_cycles = BASE_CYCLES << bit;
+            let on_cycles = (full_cycles * brightness_factor) / 100;
+            let off_cycles = full_cycles.saturating_sub(on_cycles);
 
             for row in 0..HALF_HEIGHT {
                 self.oe.set_high();
@@ -44,9 +55,15 @@ impl<Output: OutputPin> LedOutputs<Output> {
                 Self::delay(10);
                 self.lat.set_low();
 
-                self.oe.set_low();
-                Self::delay(cycles);
-                self.oe.set_high();
+                if on_cycles > 0 {
+                    self.oe.set_low();
+                    Self::delay(on_cycles);
+                    self.oe.set_high();
+                }
+
+                if off_cycles > 0 {
+                    Self::delay(off_cycles);
+                }
             }
         }
     }

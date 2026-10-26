@@ -35,9 +35,9 @@ impl DeviceService {
     pub fn new(device_repository: DeviceRepository) -> Self {
         device_repository.upsert(Vec::new());
         let (state, mut state_rx) = watch::channel(device_repository.select());
-        let (broadcast, _broadcast_rx) = broadcast::channel(4096);
-        let (disconnect_tx, _disconnect_rx) = broadcast::channel(4096);
-        let (game_assign_tx, _game_assign_rx) = broadcast::channel(4096);
+        let (broadcast, _broadcast_rx) = broadcast::channel(64);
+        let (disconnect_tx, _disconnect_rx) = broadcast::channel(64);
+        let (game_assign_tx, _game_assign_rx) = broadcast::channel(64);
         let assigned_games = Arc::new(RwLock::new(HashMap::new()));
 
         // Asynchroniczny zapis do ReDB w tle (bez blokowania wątków Tokio podczas rejestracji)

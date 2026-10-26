@@ -4,5 +4,5 @@
 **/firmware_*.bin
 **/config*.bin
 **/config*.json
-.vscode
 **/*.redb
+.vscode

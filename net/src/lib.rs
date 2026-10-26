@@ -14,7 +14,6 @@ pub use transport::{
     SplitTransport, Transport, Transport as WebSocketTransport,
 };
 
-extern crate alloc;
 use core::future::Future;
 use core::marker::PhantomData;
 use core::net::SocketAddr;

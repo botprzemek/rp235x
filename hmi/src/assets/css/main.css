@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@theme {
+    --font-display: "Outfit", "sans-serif";
+
+    --text-sm: 0.6rem;
+    --text-xs: 0.76rem;
+    --text-base: 1rem;
+    --text-lg: 1.25rem;
+    --text-xl: 1.56rem;
+    --text-2xl: 1.95rem;
+    --text-3xl: 2.44rem;
+    --text-4xl: 3.05rem;
+    --text-5xl: 3.81rem;
+    --text-6xl: 4.77rem;
+    --text-7xl: 5.96rem;
+}
+
+@layer base {
+    @font-face {
+        font-display: swap;
+        font-family: 'Outfit';
+        font-style: normal;
+        font-weight: 800;
+        src: url('/fonts/outfit.woff2') format('woff2');
+    }
+
+        @font-face {
+        font-display: swap;
+        font-family: 'Karla';
+        font-style: normal;
+        font-weight: 800;
+        src: url('/fonts/karla.woff2') format('woff2');
+    }
+
+    * {
+        @apply font-display;
+    }
+}

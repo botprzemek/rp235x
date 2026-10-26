@@ -19,6 +19,7 @@ pub static GAMMA_TABLE: [u8; 256] = [
 pub struct DisplayBuffer<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize> {
     pub frame_buffer: [[Color; WIDTH]; HEIGHT],
     pub bitplanes: BitplaneBuffer<WIDTH, HALF_HEIGHT>,
+    pub brightness_percent: u8,
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize> Default
@@ -28,6 +29,7 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize> Default
         Self {
             frame_buffer: [[[0, 0, 0]; WIDTH]; HEIGHT],
             bitplanes: BitplaneBuffer::new(),
+            brightness_percent: 100,
         }
     }
 }
@@ -35,6 +37,16 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize> Default
 impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>
     DisplayBuffer<WIDTH, HEIGHT, HALF_HEIGHT>
 {
+    #[inline(always)]
+    pub fn set_brightness(&mut self, percent: u8) {
+        self.brightness_percent = percent.min(100);
+    }
+
+    #[inline(always)]
+    pub fn brightness(&self) -> u8 {
+        self.brightness_percent
+    }
+
     #[inline(always)]
     pub fn clear(&mut self) {
         self.frame_buffer = [[[0, 0, 0]; WIDTH]; HEIGHT];
@@ -78,18 +90,27 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>
     }
 
     pub fn prepare_bitplanes(&mut self) {
+        let b = self.brightness_percent as u16;
         for row in 0..HALF_HEIGHT {
             let top_row = &self.frame_buffer[row];
             let bot_row = &self.frame_buffer[row + HALF_HEIGHT];
 
             for col in 0..WIDTH {
-                let r1 = GAMMA_TABLE[top_row[col][0] as usize];
-                let g1 = GAMMA_TABLE[top_row[col][1] as usize];
-                let b1 = GAMMA_TABLE[top_row[col][2] as usize];
+                let r1_in = if b == 100 { top_row[col][0] } else { ((top_row[col][0] as u16 * b) / 100) as u8 };
+                let g1_in = if b == 100 { top_row[col][1] } else { ((top_row[col][1] as u16 * b) / 100) as u8 };
+                let b1_in = if b == 100 { top_row[col][2] } else { ((top_row[col][2] as u16 * b) / 100) as u8 };
 
-                let r2 = GAMMA_TABLE[bot_row[col][0] as usize];
-                let g2 = GAMMA_TABLE[bot_row[col][1] as usize];
-                let b2 = GAMMA_TABLE[bot_row[col][2] as usize];
+                let r2_in = if b == 100 { bot_row[col][0] } else { ((bot_row[col][0] as u16 * b) / 100) as u8 };
+                let g2_in = if b == 100 { bot_row[col][1] } else { ((bot_row[col][1] as u16 * b) / 100) as u8 };
+                let b2_in = if b == 100 { bot_row[col][2] } else { ((bot_row[col][2] as u16 * b) / 100) as u8 };
+
+                let r1 = GAMMA_TABLE[r1_in as usize];
+                let g1 = GAMMA_TABLE[g1_in as usize];
+                let b1 = GAMMA_TABLE[b1_in as usize];
+
+                let r2 = GAMMA_TABLE[r2_in as usize];
+                let g2 = GAMMA_TABLE[g2_in as usize];
+                let b2 = GAMMA_TABLE[b2_in as usize];
 
                 for bit in 0..8 {
                     let mask = ((r1 >> bit) & 1)

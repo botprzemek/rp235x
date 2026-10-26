@@ -243,14 +243,10 @@ impl Game {
     fn handle_running(&mut self, delta: core::time::Duration) {
         let delta_millis = delta.as_millis() as u32;
 
-        if self.regulation_millis == 0 {
-            return self.next_quarter();
-        };
+        self.regulation_millis = self.regulation_millis.saturating_sub(delta_millis);
 
-        if self.regulation_millis >= delta_millis {
-            self.regulation_millis -= delta_millis;
-        } else {
-            self.regulation_millis = 0;
+        if self.regulation_millis == 0 {
+            self.next_quarter();
         }
     }
 

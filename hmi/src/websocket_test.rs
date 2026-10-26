@@ -19,6 +19,8 @@ use web_sys::{BinaryType, MessageEvent, WebSocket};
 use yew::platform::spawn_local;
 use yew::prelude::*;
 
+use crate::scoreboard::Scoreboard;
+
 pub struct BrowserWebSocketAdapter {
     outgoing_tx: UnboundedSender<[u8; PACKET_SIZE]>,
     incoming_rx: UnboundedReceiver<[u8; PACKET_SIZE]>,
@@ -158,11 +160,12 @@ pub fn app() -> Html {
             let client_dev = load_or_create_browser_device();
             device.set(client_dev);
 
-            let host = web_sys::window()
-                .and_then(|w| w.location().host().ok())
-                .filter(|h| !h.is_empty())
-                .unwrap_or_else(|| "127.0.0.1:3000".to_string());
-            let ws_url = format!("ws://{}/ws", host);
+            // let host = web_sys::window()
+            //     .and_then(|w| w.location().host().ok())
+            //     .filter(|h| !h.is_empty())
+            //     .unwrap_or_else(|| "127.0.0.1:3000".to_string());
+            // let ws_url = format!("ws://{}/ws", host);
+            let ws_url = "ws://127.0.0.1:3000/ws".to_string();
 
             if let Ok(ws) = WebSocket::new(&ws_url) {
                 ws.set_binary_type(BinaryType::Arraybuffer);
@@ -613,6 +616,26 @@ pub fn app() -> Html {
         Quarter::Q3 => "Q3",
         Quarter::Q4 => "Q4",
     };
+    let is_idle_default = home_score == 0 && away_score == 0 && game.get_state() == basketball::State::Idle;
+    let display_home_score = if is_idle_default { 139 } else { home_score };
+    let display_away_score = if is_idle_default { 127 } else { away_score };
+    let display_time = if is_idle_default {
+        "02:56".to_string()
+    } else {
+        format!("{:02}:{:02}", reg_min, reg_sec)
+    };
+    let display_quarter = if is_idle_default {
+        "4Q".to_string()
+    } else {
+        match game.get_quarter() {
+            Quarter::Q1 => "1Q".to_string(),
+            Quarter::Q2 => "2Q".to_string(),
+            Quarter::Q3 => "3Q".to_string(),
+            Quarter::Q4 => "4Q".to_string(),
+            Quarter::None => "1Q".to_string(),
+        }
+    };
+    let display_shot_clock = if is_idle_default { 24 } else { shot_sec };
     let dev = *device;
     let my_sn = dev.get_serial_number().unwrap_or("-");
     let watchers: Vec<Device> = (*connected_devices)
@@ -627,7 +650,7 @@ pub fn app() -> Html {
         .collect();
 
     html! {
-        <div style="font-family: sans-serif; max-width: 650px; margin: 40px auto; padding: 20px;">
+        <div style="font-family: sans-serif; max-width: 780px; margin: 40px auto; padding: 20px;">
             <h2>{ "Panel HMI (Yew / Rust) - WebSocket" }</h2>
 
             <div style="border: 1px solid #ccc; padding: 15px; margin-bottom: 10px; border-radius: 5px;">
@@ -640,7 +663,22 @@ pub fn app() -> Html {
                         my_sn
                     ) }
                 </p>
-                <p style="font-size: 16px; font-weight: bold; margin: 8px 0;">
+
+                <Scoreboard
+                    home_team={"LA LAKERS"}
+                    away_team={"GS WARRIORS"}
+                    home_score={display_home_score}
+                    away_score={display_away_score}
+                    time={display_time}
+                    shot_clock={display_shot_clock}
+                    quarter={display_quarter}
+                    home_timeouts={2}
+                    away_timeouts={4}
+                    home_timeout_dashes={5}
+                    away_timeout_dashes={5}
+                />
+
+                <p style="font-size: 12px; color: #64748b; margin: 6px 0 12px 0;">
                     { format!(
                         "Gra #{} | Stan: {:?} | Kwarta: {} | Czas: {:02}:{:02}.{:02} (24s: {:02}.{:02}) | Wynik: {} : {}",
                         game.id(),
