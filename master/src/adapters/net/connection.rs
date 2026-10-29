@@ -1,4 +1,7 @@
+//! Concurrent inbound/outbound connection loops for WebSocket and packet transports.
+
 use core::time::Duration;
+use std::future;
 use std::sync::Arc;
 
 use basketball::{Game, Scorable};
@@ -9,8 +12,9 @@ use net::{
     SplitTransport,
 };
 use tokio::sync::{broadcast, mpsc, watch};
+use tokio::time::{self, MissedTickBehavior};
 
-use super::MasterServerHandler;
+use crate::adapters::net::MasterServerHandler;
 use crate::services::{GameFrame, Observable, Services};
 
 /// Maximum number of queued control packets (acks, list updates) per connection.
@@ -36,13 +40,13 @@ enum Outbound {
 /// [`PacketSender`] that enqueues packets for the outbound half without ever
 /// awaiting socket I/O.
 struct QueueSender {
-    tx: mpsc::Sender<Outbound>,
+    sender: mpsc::Sender<Outbound>,
     overflowed: bool,
 }
 
 impl QueueSender {
     fn push(&mut self, message: Outbound) {
-        if self.tx.try_send(message).is_err() {
+        if self.sender.try_send(message).is_err() {
             self.overflowed = true;
         }
     }
@@ -54,26 +58,27 @@ impl PacketSender for QueueSender {
     }
 }
 
+/// Runs the concurrent inbound and outbound loops for a single client connection.
 pub async fn run<R, W>(receiver: R, sender: W, services: Arc<Services>)
 where
     R: PacketReceiver,
     W: PacketSender,
 {
-    let (out_tx, out_rx) = mpsc::channel(OUTBOUND_CAPACITY);
+    let (outbound_tx, outbound_rx) = mpsc::channel(OUTBOUND_CAPACITY);
     let (session_tx, session_rx) = watch::channel(Session::default());
 
     // Both halves are polled concurrently; a pending `send()` in the outbound
     // half does not prevent the inbound half from making progress. The
     // connection ends as soon as the inbound half finishes.
     tokio::select! {
-        _ = read_loop(receiver, out_tx, session_tx, Arc::clone(&services)) => {}
-        _ = write_loop(sender, out_rx, session_rx, services) => {}
+        () = read_loop(receiver, outbound_tx, session_tx, Arc::clone(&services)) => {}
+        () = write_loop(sender, outbound_rx, session_rx, services) => {}
     }
 }
 
 async fn read_loop<R>(
     receiver: R,
-    out_tx: mpsc::Sender<Outbound>,
+    outbound_tx: mpsc::Sender<Outbound>,
     session_tx: watch::Sender<Session>,
     services: Arc<Services>,
 ) where
@@ -81,7 +86,7 @@ async fn read_loop<R>(
 {
     let handler = MasterServerHandler::new(Arc::clone(&services));
     let queue = QueueSender {
-        tx: out_tx,
+        sender: outbound_tx,
         overflowed: false,
     };
     let mut server = Server::new(SplitTransport::new(queue, receiver), handler);
@@ -91,20 +96,20 @@ async fn read_loop<R>(
 
     loop {
         tokio::select! {
-            res = disconnect_rx.recv() => {
-                if let Ok(target_sn) = res
-                    && server.handler().is_device(&target_sn)
+            result = disconnect_rx.recv() => {
+                if let Ok(target_serial_number) = result
+                    && server.handler().is_device(&target_serial_number)
                 {
-                    println!("INFO: Closing WebSocket connection for disconnected device sn={}", target_sn);
+                    println!("INFO: Closing WebSocket connection for disconnected device sn={target_serial_number}");
                     return;
                 }
             }
 
             // Assignment is event driven: the device registry is only queried
             // when an assignment for this device actually happens.
-            res = game_assign_rx.recv() => {
-                match res {
-                    Ok((target_sn, _)) if server.handler().is_device(&target_sn) => {
+            result = game_assign_rx.recv() => {
+                match result {
+                    Ok(assignment) if server.handler().is_device(&assignment.serial_number) => {
                         server.handler_mut().sync_assignment();
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => {
@@ -125,21 +130,21 @@ async fn read_loop<R>(
                         {
                             // Publish the session before the resync request so
                             // the outbound half already sees a browser session.
-                            session_tx.send_if_modified(|s| replace(s, server.handler().session()));
+                            session_tx.send_if_modified(|session| replace(session, server.handler().session()));
                             server.transport_mut().sender_mut().push(Outbound::BrowserResync);
                         }
                     }
-                    Err(NetError::InvalidPacket(err)) => {
-                        eprintln!("WARN: Invalid client packet: {}", err);
+                    Err(NetError::InvalidPacket(error)) => {
+                        eprintln!("WARN: Invalid client packet: {error}");
                     }
-                    Err(NetError::Disconnected) => {
+                    Err(NetError::Disconnected | _) => {
                         if let Some(device) = server.handler().validated_device() {
                             if server.handler().is_web_browser() {
                                 println!(
                                     "INFO: Client disconnected: {:?} (id={}, sn={})",
                                     device.device_type(),
-                                    device.get_device_id().unwrap_or("unknown"),
-                                    device.get_serial_number().unwrap_or("unknown")
+                                    device.device_id().unwrap_or("unknown"),
+                                    device.serial_number().unwrap_or("unknown")
                                 );
                             }
                             services.devices().unregister(&device);
@@ -160,7 +165,7 @@ async fn read_loop<R>(
             }
         }
 
-        session_tx.send_if_modified(|s| replace(s, server.handler().session()));
+        session_tx.send_if_modified(|session| replace(session, server.handler().session()));
     }
 }
 
@@ -174,7 +179,7 @@ fn replace(current: &mut Session, next: Session) -> bool {
 
 async fn write_loop<W>(
     mut sender: W,
-    mut out_rx: mpsc::Receiver<Outbound>,
+    mut outbound_rx: mpsc::Receiver<Outbound>,
     mut session_rx: watch::Receiver<Session>,
     services: Arc<Services>,
 ) where
@@ -191,12 +196,12 @@ async fn write_loop<W>(
     let mut devices_dirty = false;
     let mut games_dirty = false;
 
-    let mut browser_sync_interval = tokio::time::interval(BROWSER_SYNC_INTERVAL);
-    browser_sync_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut browser_sync_interval = time::interval(BROWSER_SYNC_INTERVAL);
+    browser_sync_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
     loop {
         tokio::select! {
-            message = out_rx.recv() => {
+            message = outbound_rx.recv() => {
                 match message {
                     Some(Outbound::Packet(bytes)) => sender.send_packet(&bytes).await,
                     Some(Outbound::BrowserResync) => {
@@ -221,8 +226,8 @@ async fn write_loop<W>(
                 }
             }
 
-            res = session_rx.changed() => {
-                if res.is_err() {
+            result = session_rx.changed() => {
+                if result.is_err() {
                     return;
                 }
                 let next = *session_rx.borrow_and_update();
@@ -235,8 +240,8 @@ async fn write_loop<W>(
                 session = next;
             }
 
-            res = changed(&mut frame_rx) => {
-                match res {
+            result = changed(&mut frame_rx) => {
+                match result {
                     Ok(()) => {
                         let frame = frame_rx.as_mut().and_then(|rx| rx.borrow_and_update().clone());
                         if let Some(frame) = frame {
@@ -247,14 +252,14 @@ async fn write_loop<W>(
                 }
             }
 
-            res = changed(&mut game_rx) => {
-                if res.is_ok() {
+            result = changed(&mut game_rx) => {
+                if result.is_ok() {
                     games_dirty = true;
                 }
             }
 
-            res = changed(&mut devices_rx) => {
-                if res.is_ok() {
+            result = changed(&mut devices_rx) => {
+                if result.is_ok() {
                     devices_dirty = true;
                 }
             }
@@ -281,7 +286,7 @@ async fn write_loop<W>(
 async fn changed<T>(rx: &mut Option<watch::Receiver<T>>) -> Result<(), watch::error::RecvError> {
     match rx {
         Some(rx) => rx.changed().await,
-        None => std::future::pending().await,
+        None => future::pending().await,
     }
 }
 
@@ -293,10 +298,10 @@ async fn sync_devices_to_browser<W>(
 ) where
     W: PacketSender,
 {
-    for previous in known_devices.iter() {
+    for previous in &*known_devices {
         let still_present = current_devices
             .iter()
-            .any(|d| d.get_serial_number() == previous.get_serial_number());
+            .any(|device| device.serial_number() == previous.serial_number());
         if !still_present {
             *sequence_id = sequence_id.wrapping_add(1);
             let packet = ServerPacket::new(
@@ -308,8 +313,8 @@ async fn sync_devices_to_browser<W>(
         }
     }
 
-    for device in current_devices.iter() {
-        let already_sent = known_devices.iter().any(|d| d == device);
+    for device in &current_devices {
+        let already_sent = known_devices.iter().any(|existing| existing == device);
         if !already_sent {
             *sequence_id = sequence_id.wrapping_add(1);
             let packet =
@@ -329,12 +334,12 @@ async fn sync_games_to_browser<W>(
 ) where
     W: PacketSender,
 {
-    for game in current_games.iter() {
-        let unchanged = known_games.iter().any(|g| {
-            g.id() == game.id()
-                && g.get_scores() == game.get_scores()
-                && g.get_state() == game.get_state()
-                && g.get_quarter() == game.get_quarter()
+    for game in &current_games {
+        let unchanged = known_games.iter().any(|existing| {
+            existing.id() == game.id()
+                && existing.scores() == game.scores()
+                && existing.state() == game.state()
+                && existing.quarter() == game.quarter()
         });
         if !unchanged {
             *sequence_id = sequence_id.wrapping_add(1);

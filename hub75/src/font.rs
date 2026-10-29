@@ -1,5 +1,9 @@
+//! Bitmap font glyphs for scoreboard digits and uppercase letters.
+
+/// 7x9 bitmap glyph stored as 9 rows of 8-bit masks.
 pub type Glyph = [u8; 9];
 
+/// Bitmap glyphs for ASCII digits `'0'` through `'9'`.
 pub static FONT_DIGITS: [Glyph; 10] = [
     // 0
     [
@@ -53,6 +57,7 @@ pub static FONT_DIGITS: [Glyph; 10] = [
     ],
 ];
 
+/// Bitmap glyphs for uppercase ASCII letters `'A'` through `'Z'`.
 pub static FONT_UPPERCASE: [Glyph; 26] = [
     // A
     [
@@ -120,24 +125,26 @@ pub static FONT_UPPERCASE: [Glyph; 26] = [
     [0; 9],
 ];
 
+/// Returns `true` if the glyph pixel at `(pixel_x, pixel_y)` for `character` is lit.
+#[must_use]
 #[inline]
-pub fn get_ascii_pixel(mut char: u8, pixel_x: usize, pixel_y: usize) -> bool {
+pub fn is_ascii_pixel_set(mut character: u8, pixel_x: usize, pixel_y: usize) -> bool {
     if pixel_x >= 7 || pixel_y >= 9 {
         return false;
     }
 
-    if char == b':' {
+    if character == b':' {
         return (3..=6).contains(&pixel_y) && (pixel_x == 2 || pixel_x == 3);
     }
 
-    if char.is_ascii_lowercase() {
-        char -= 32;
+    if character.is_ascii_lowercase() {
+        character -= 32;
     }
 
     let shift = 7 - pixel_x;
-    let row_data = match &char {
-        b'0'..=b'9' => FONT_DIGITS[(char - b'0') as usize][pixel_y],
-        b'A'..=b'Z' => FONT_UPPERCASE[(char - b'A') as usize][pixel_y],
+    let row_data = match character {
+        b'0'..=b'9' => FONT_DIGITS[(character - b'0') as usize][pixel_y],
+        b'A'..=b'Z' => FONT_UPPERCASE[(character - b'A') as usize][pixel_y],
         _ => 0,
     };
 

@@ -1,34 +1,36 @@
+//! Application builder, server startup, and graceful shutdown orchestration.
+
 use std::marker::PhantomData;
 use std::sync::Arc;
 
 use tokio::net::{TcpListener, UdpSocket};
+use tokio::signal;
 
 use crate::adapters::data::ReDBProvider;
 use crate::adapters::net::{WebDriver, WorkerDriver};
 use crate::adapters::repositories::Registry;
 use crate::services::Services;
 
+/// Typestate marker indicating that a listener address has not been configured.
 pub struct Absent;
+
+/// Typestate marker indicating that a listener address has been configured.
 pub struct Present;
 
-pub struct Application<HTTP, UDP> {
+/// Configured master server application ready to start HTTP and UDP listeners.
+pub struct Application<HttpState, UdpState> {
     http_address: Option<String>,
     udp_address: Option<String>,
-    _http: PhantomData<HTTP>,
-    _udp: PhantomData<UDP>,
+    _http: PhantomData<HttpState>,
+    _udp: PhantomData<UdpState>,
 }
 
-pub struct ApplicationBuilder<HTTP = Absent, UDP = Absent> {
+/// Builder for configuring [`Application`] listener addresses.
+pub struct ApplicationBuilder<HttpState = Absent, UdpState = Absent> {
     http_address: Option<String>,
     udp_address: Option<String>,
-    _http: PhantomData<HTTP>,
-    _udp: PhantomData<UDP>,
-}
-
-trait GracefulShutdown {
-    async fn ctrl_c() -> ();
-    async fn terminate() -> ();
-    async fn shutdown() -> ();
+    _http: PhantomData<HttpState>,
+    _udp: PhantomData<UdpState>,
 }
 
 impl Default for ApplicationBuilder<Absent, Absent> {
@@ -37,38 +39,41 @@ impl Default for ApplicationBuilder<Absent, Absent> {
     }
 }
 
-impl<HTTP, UDP> GracefulShutdown for Application<HTTP, UDP> {
-    async fn ctrl_c() {
-        tokio::signal::ctrl_c()
+impl<HttpState, UdpState> Application<HttpState, UdpState> {
+    async fn wait_for_ctrl_c() {
+        signal::ctrl_c()
             .await
             .expect("ERROR: Failed to install Ctrl+C handler");
     }
 
-    async fn terminate() {
+    async fn wait_for_terminate() {
         #[cfg(not(unix))]
         std::future::pending::<()>().await;
 
         #[cfg(unix)]
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        signal::unix::signal(signal::unix::SignalKind::terminate())
             .expect("ERROR: Failed to install SIGNAL handler")
             .recv()
             .await;
     }
 
-    async fn shutdown() -> () {
+    async fn wait_for_shutdown() {
         tokio::select! {
-            _ = Self::ctrl_c() => { println!("\nINFO: Gracefully exiting (CTRL+C)"); },
-            _ = Self::terminate() => { println!("\nINFO: Gracefully exiting (SIGTERM)"); },
+            () = Self::wait_for_ctrl_c() => {
+                println!("\nINFO: Gracefully exiting (CTRL+C)");
+            }
+            () = Self::wait_for_terminate() => {
+                println!("\nINFO: Gracefully exiting (SIGTERM)");
+            }
         }
     }
-}
 
-impl<HTTP, UDP> Application<HTTP, UDP> {
-    pub async fn with_http(self) -> Application<Present, UDP> {
+    /// Logs the HTTP listener configuration and marks the HTTP typestate as [`Present`].
+    pub async fn with_http(self) -> Application<Present, UdpState> {
         match &self.http_address {
-            Some(address) => println!("INFO: Listening on http://{}", address),
+            Some(address) => println!("INFO: Listening on http://{address}"),
             None => println!("INFO: HTTP listener is not enabled... omitting"),
-        };
+        }
 
         Application {
             http_address: self.http_address,
@@ -78,11 +83,12 @@ impl<HTTP, UDP> Application<HTTP, UDP> {
         }
     }
 
-    pub async fn with_udp(self) -> Application<HTTP, Present> {
+    /// Logs the UDP listener configuration and marks the UDP typestate as [`Present`].
+    pub async fn with_udp(self) -> Application<HttpState, Present> {
         match &self.udp_address {
-            Some(address) => println!("INFO: Listening on udp://{}", address),
+            Some(address) => println!("INFO: Listening on udp://{address}"),
             None => println!("INFO: UDP listener is not enabled... omitting"),
-        };
+        }
 
         Application {
             http_address: self.http_address,
@@ -92,31 +98,39 @@ impl<HTTP, UDP> Application<HTTP, UDP> {
         }
     }
 
+    /// Initializes the database, services, and configured network listeners.
     pub async fn start(self) -> Arc<Services> {
         let database = ReDBProvider::new();
         let registry = Registry::new(database);
-        let services = Arc::new(Services::new(registry));
+        let services = Arc::new(Services::new(&registry));
 
         if let Some(http_address) = &self.http_address {
-            let listener = TcpListener::bind(http_address).await.unwrap();
+            let listener = TcpListener::bind(http_address)
+                .await
+                .expect("failed to bind HTTP TCP listener");
             WebDriver::new(listener).spawn(Arc::clone(&services));
         }
 
         if let Some(udp_address) = &self.udp_address {
-            let socket = UdpSocket::bind(udp_address).await.unwrap();
+            let socket = UdpSocket::bind(udp_address)
+                .await
+                .expect("failed to bind UDP socket");
             WorkerDriver::new(socket).spawn(Arc::clone(&services));
         }
 
         services
     }
 
+    /// Starts the application and waits until a termination signal is received.
     pub async fn run(self) {
-        let _ = self.start().await;
-        Self::shutdown().await;
+        let _services = self.start().await;
+        Self::wait_for_shutdown().await;
     }
 }
 
 impl ApplicationBuilder<Absent, Absent> {
+    /// Creates a new [`ApplicationBuilder`] with no listeners configured.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             http_address: None,
@@ -127,8 +141,10 @@ impl ApplicationBuilder<Absent, Absent> {
     }
 }
 
-impl<HTTP, UDP> ApplicationBuilder<HTTP, UDP> {
-    pub fn http_address(self, address: &str) -> ApplicationBuilder<Present, UDP> {
+impl<HttpState, UdpState> ApplicationBuilder<HttpState, UdpState> {
+    /// Configures the HTTP server bind `address`.
+    #[must_use]
+    pub fn http_address(self, address: &str) -> ApplicationBuilder<Present, UdpState> {
         ApplicationBuilder {
             http_address: Some(address.to_string()),
             udp_address: self.udp_address,
@@ -137,7 +153,9 @@ impl<HTTP, UDP> ApplicationBuilder<HTTP, UDP> {
         }
     }
 
-    pub fn udp_address(self, address: &str) -> ApplicationBuilder<HTTP, Present> {
+    /// Configures the UDP worker bind `address`.
+    #[must_use]
+    pub fn udp_address(self, address: &str) -> ApplicationBuilder<HttpState, Present> {
         ApplicationBuilder {
             http_address: self.http_address,
             udp_address: Some(address.to_string()),
@@ -146,7 +164,9 @@ impl<HTTP, UDP> ApplicationBuilder<HTTP, UDP> {
         }
     }
 
-    pub fn build(self) -> Application<HTTP, UDP> {
+    /// Builds the [`Application`].
+    #[must_use]
+    pub fn build(self) -> Application<HttpState, UdpState> {
         Application {
             http_address: self.http_address,
             udp_address: self.udp_address,

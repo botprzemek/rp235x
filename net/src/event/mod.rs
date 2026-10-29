@@ -1,3 +1,5 @@
+//! Client and server event definitions.
+
 pub mod client;
 pub mod server;
 

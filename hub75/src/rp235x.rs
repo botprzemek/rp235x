@@ -1,8 +1,12 @@
-use crate::{LedOutputs, OutputPin};
+//! RP235x GPIO peripheral bindings for [`LedOutputs`].
 
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::{Peri, peripherals};
 
+use crate::{LedOutputs, OutputPin};
+
+/// RP235x GPIO pins assigned to the HUB75 panel interface.
+#[non_exhaustive]
 pub struct LedPeripherals {
     pub r1: Peri<'static, peripherals::PIN_2>,
     pub g1: Peri<'static, peripherals::PIN_3>,
@@ -22,13 +26,60 @@ pub struct LedPeripherals {
     pub oe: Peri<'static, peripherals::PIN_13>,
 }
 
-impl<'a> OutputPin for Output<'a> {
+impl LedPeripherals {
+    /// Bundles the RP235x GPIO pins into [`LedPeripherals`].
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        r1: Peri<'static, peripherals::PIN_2>,
+        g1: Peri<'static, peripherals::PIN_3>,
+        b1: Peri<'static, peripherals::PIN_4>,
+        r2: Peri<'static, peripherals::PIN_5>,
+        g2: Peri<'static, peripherals::PIN_8>,
+        b2: Peri<'static, peripherals::PIN_9>,
+        a: Peri<'static, peripherals::PIN_10>,
+        b: Peri<'static, peripherals::PIN_16>,
+        c: Peri<'static, peripherals::PIN_18>,
+        d: Peri<'static, peripherals::PIN_20>,
+        e: Peri<'static, peripherals::PIN_22>,
+        clk: Peri<'static, peripherals::PIN_11>,
+        lat: Peri<'static, peripherals::PIN_12>,
+        oe: Peri<'static, peripherals::PIN_13>,
+    ) -> Self {
+        Self {
+            r1,
+            g1,
+            b1,
+            r2,
+            g2,
+            b2,
+            a,
+            b,
+            c,
+            d,
+            e,
+            clk,
+            lat,
+            oe,
+        }
+    }
+}
+
+impl OutputPin for Output<'_> {
     fn set_high(&mut self) {
-        self.set_high();
+        Self::set_high(self);
     }
 
     fn set_low(&mut self) {
-        self.set_low();
+        Self::set_low(self);
+    }
+}
+
+impl LedOutputs<Output<'static>> {
+    /// Initializes [`LedOutputs`] from RP235x [`LedPeripherals`].
+    #[must_use]
+    pub fn from_peripherals(peripherals: LedPeripherals) -> Self {
+        Self::from(peripherals)
     }
 }
 
@@ -46,7 +97,7 @@ impl From<LedPeripherals> for LedOutputs<Output<'static>> {
             b: Output::new(peripherals.b, Level::Low),
             c: Output::new(peripherals.c, Level::Low),
             d: Output::new(peripherals.d, Level::Low),
-            _e: Output::new(peripherals.e, Level::Low),
+            e: Output::new(peripherals.e, Level::Low),
 
             clk: Output::new(peripherals.clk, Level::Low),
             lat: Output::new(peripherals.lat, Level::Low),

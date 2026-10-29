@@ -1,7 +1,10 @@
+//! Browser entry point for rendering or hydrating the Yew [`App`].
+
 use hmi::App;
+use yew::Renderer;
 
 fn main() {
-    let app = yew::Renderer::<App>::new();
+    let app = Renderer::<App>::new();
 
     #[cfg(feature = "csr")]
     app.render();

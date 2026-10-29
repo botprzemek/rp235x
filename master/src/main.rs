@@ -1,9 +1,6 @@
-mod adapters;
-mod services;
+//! Entry point for the `master` server binary.
 
-mod application;
-
-use application::ApplicationBuilder;
+use master::ApplicationBuilder;
 
 #[tokio::main]
 async fn main() {

@@ -1,7 +1,10 @@
+//! Framebuffer, text drawing, and gamma-corrected bitplane preparation for HUB75 panels.
+
 use crate::bitplane::BitplaneBuffer;
 use crate::color::Color;
-use crate::font::get_ascii_pixel;
+use crate::font;
 
+/// 8-bit gamma correction lookup table for LED perceptual linearity.
 pub static GAMMA_TABLE: [u8; 256] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7,
@@ -16,6 +19,8 @@ pub static GAMMA_TABLE: [u8; 256] = [
     205, 207, 210, 212, 214, 216, 218, 221, 223, 225, 228, 230, 235, 242, 255,
 ];
 
+/// RGB framebuffer paired with a [`BitplaneBuffer`] and global brightness setting.
+#[non_exhaustive]
 pub struct DisplayBuffer<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize> {
     pub frame_buffer: [[Color; WIDTH]; HEIGHT],
     pub bitplanes: BitplaneBuffer<WIDTH, HALF_HEIGHT>,
@@ -26,32 +31,43 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize> Default
     for DisplayBuffer<WIDTH, HEIGHT, HALF_HEIGHT>
 {
     fn default() -> Self {
-        Self {
-            frame_buffer: [[[0, 0, 0]; WIDTH]; HEIGHT],
-            bitplanes: BitplaneBuffer::new(),
-            brightness_percent: 100,
-        }
+        Self::new()
     }
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>
     DisplayBuffer<WIDTH, HEIGHT, HALF_HEIGHT>
 {
+    /// Creates a new cleared [`DisplayBuffer`] at 100% brightness.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            frame_buffer: [[[0, 0, 0]; WIDTH]; HEIGHT],
+            bitplanes: BitplaneBuffer::new(),
+            brightness_percent: 100,
+        }
+    }
+
+    /// Sets the display brightness percentage (`0..=100`).
     #[inline(always)]
     pub fn set_brightness(&mut self, percent: u8) {
         self.brightness_percent = percent.min(100);
     }
 
+    /// Returns the display brightness percentage (`0..=100`).
+    #[must_use]
     #[inline(always)]
     pub fn brightness(&self) -> u8 {
         self.brightness_percent
     }
 
+    /// Clears all pixels in the framebuffer to black.
     #[inline(always)]
     pub fn clear(&mut self) {
         self.frame_buffer = [[[0, 0, 0]; WIDTH]; HEIGHT];
     }
 
+    /// Sets the pixel at `(x, y)` to `color` if within bounds.
     #[inline(always)]
     pub fn set_pixel(&mut self, x: usize, y: usize, color: Color) {
         if x < WIDTH && y < HEIGHT {
@@ -59,10 +75,11 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>
         }
     }
 
+    /// Renders an ASCII `text` string starting at `(start_x, start_y)` using `color`.
     pub fn draw_text(&mut self, text: &str, start_x: i32, start_y: i32, color: Color) {
-        for (char_idx, c) in text.bytes().enumerate() {
-            let char_x = start_x + (char_idx as i32 * 8);
-            if char_x + 7 < 0 || char_x >= WIDTH as i32 {
+        for (character_index, character) in text.bytes().enumerate() {
+            let character_x = start_x + (character_index as i32 * 8);
+            if character_x + 7 < 0 || character_x >= WIDTH as i32 {
                 continue;
             }
 
@@ -73,12 +90,13 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>
                 }
 
                 for pixel_x in 0..7 {
-                    let target_x = char_x + pixel_x;
+                    let target_x = character_x + pixel_x;
                     if target_x < 0 || target_x >= WIDTH as i32 {
                         continue;
                     }
 
-                    let is_pixel_set = get_ascii_pixel(c, pixel_x as usize, pixel_y as usize);
+                    let is_pixel_set =
+                        font::is_ascii_pixel_set(character, pixel_x as usize, pixel_y as usize);
                     if !is_pixel_set {
                         continue;
                     }
@@ -89,43 +107,70 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>
         }
     }
 
+    /// Converts the RGB `frame_buffer` into BCM bitplanes with brightness scaling and gamma correction.
     pub fn prepare_bitplanes(&mut self) {
-        let b = self.brightness_percent as u16;
+        let brightness = u16::from(self.brightness_percent);
         for row in 0..HALF_HEIGHT {
             let top_row = &self.frame_buffer[row];
-            let bot_row = &self.frame_buffer[row + HALF_HEIGHT];
+            let bottom_row = &self.frame_buffer[row + HALF_HEIGHT];
 
-            for col in 0..WIDTH {
-                let r1_in = if b == 100 { top_row[col][0] } else { ((top_row[col][0] as u16 * b) / 100) as u8 };
-                let g1_in = if b == 100 { top_row[col][1] } else { ((top_row[col][1] as u16 * b) / 100) as u8 };
-                let b1_in = if b == 100 { top_row[col][2] } else { ((top_row[col][2] as u16 * b) / 100) as u8 };
+            for column in 0..WIDTH {
+                let red_1_in = if brightness == 100 {
+                    top_row[column][0]
+                } else {
+                    ((u16::from(top_row[column][0]) * brightness) / 100) as u8
+                };
+                let green_1_in = if brightness == 100 {
+                    top_row[column][1]
+                } else {
+                    ((u16::from(top_row[column][1]) * brightness) / 100) as u8
+                };
+                let blue_1_in = if brightness == 100 {
+                    top_row[column][2]
+                } else {
+                    ((u16::from(top_row[column][2]) * brightness) / 100) as u8
+                };
 
-                let r2_in = if b == 100 { bot_row[col][0] } else { ((bot_row[col][0] as u16 * b) / 100) as u8 };
-                let g2_in = if b == 100 { bot_row[col][1] } else { ((bot_row[col][1] as u16 * b) / 100) as u8 };
-                let b2_in = if b == 100 { bot_row[col][2] } else { ((bot_row[col][2] as u16 * b) / 100) as u8 };
+                let red_2_in = if brightness == 100 {
+                    bottom_row[column][0]
+                } else {
+                    ((u16::from(bottom_row[column][0]) * brightness) / 100) as u8
+                };
+                let green_2_in = if brightness == 100 {
+                    bottom_row[column][1]
+                } else {
+                    ((u16::from(bottom_row[column][1]) * brightness) / 100) as u8
+                };
+                let blue_2_in = if brightness == 100 {
+                    bottom_row[column][2]
+                } else {
+                    ((u16::from(bottom_row[column][2]) * brightness) / 100) as u8
+                };
 
-                let r1 = GAMMA_TABLE[r1_in as usize];
-                let g1 = GAMMA_TABLE[g1_in as usize];
-                let b1 = GAMMA_TABLE[b1_in as usize];
+                let red_1 = GAMMA_TABLE[red_1_in as usize];
+                let green_1 = GAMMA_TABLE[green_1_in as usize];
+                let blue_1 = GAMMA_TABLE[blue_1_in as usize];
 
-                let r2 = GAMMA_TABLE[r2_in as usize];
-                let g2 = GAMMA_TABLE[g2_in as usize];
-                let b2 = GAMMA_TABLE[b2_in as usize];
+                let red_2 = GAMMA_TABLE[red_2_in as usize];
+                let green_2 = GAMMA_TABLE[green_2_in as usize];
+                let blue_2 = GAMMA_TABLE[blue_2_in as usize];
 
                 for bit in 0..8 {
-                    let mask = ((r1 >> bit) & 1)
-                        | (((g1 >> bit) & 1) << 1)
-                        | (((b1 >> bit) & 1) << 2)
-                        | (((r2 >> bit) & 1) << 3)
-                        | (((g2 >> bit) & 1) << 4)
-                        | (((b2 >> bit) & 1) << 5);
+                    let mask = ((red_1 >> bit) & 1)
+                        | (((green_1 >> bit) & 1) << 1)
+                        | (((blue_1 >> bit) & 1) << 2)
+                        | (((red_2 >> bit) & 1) << 3)
+                        | (((green_2 >> bit) & 1) << 4)
+                        | (((blue_2 >> bit) & 1) << 5);
 
-                    self.bitplanes.data[row][bit as usize][col] = mask;
+                    self.bitplanes.data[row][bit as usize][column] = mask;
                 }
             }
         }
     }
 
+    /// Returns a reference to the prepared [`BitplaneBuffer`].
+    #[must_use]
     pub fn bitplanes(&self) -> &BitplaneBuffer<WIDTH, HALF_HEIGHT> {
         &self.bitplanes
     }

@@ -1,14 +1,15 @@
+//! `create` subcommand for compiling a JSON configuration into an encrypted binary file.
+
 use std::path::PathBuf;
 
 use clap::Args;
-use config::{
-    Config, ConfigError,
-    file::{BinWriter, JsonReader},
-    print::Print,
-};
+use config::file::{BinWriter, JsonReader};
+use config::print::Print;
+use config::{Config, ConfigError};
 
+/// Arguments for the `create` subcommand.
 #[derive(Args)]
-#[command(about="TODO", long_about = None)]
+#[command(about = "Create an encrypted binary config from JSON", long_about = None)]
 pub struct CreateArgs {
     #[arg(short, long)]
     pub verbose: bool,
@@ -20,10 +21,12 @@ pub struct CreateArgs {
     pub output: PathBuf,
 }
 
+/// Handler for the `create` subcommand.
 pub struct CreateCommand;
 
 impl CreateCommand {
-    pub fn handle(args: CreateArgs) -> Result<(), ConfigError> {
+    /// Reads a JSON configuration from `args.input` and writes the encrypted binary to `args.output`.
+    pub fn handle(args: &CreateArgs) -> Result<(), ConfigError> {
         let config = Config::read(&args.input)?;
 
         if args.verbose {

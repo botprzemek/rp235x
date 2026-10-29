@@ -1,3 +1,7 @@
+//! Client-to-server event types.
+
+/// Event code sent by a client in a [`crate::ClientPacket`].
+#[non_exhaustive]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -28,29 +32,30 @@ pub enum ClientEvent {
 
 impl TryFrom<u8> for ClientEvent {
     type Error = &'static str;
+
     fn try_from(event: u8) -> Result<Self, Self::Error> {
         match event {
-            0x01 => Ok(ClientEvent::HandshakeRequest),
-            0x02 => Ok(ClientEvent::HandshakeHeartbeat),
+            0x01 => Ok(Self::HandshakeRequest),
+            0x02 => Ok(Self::HandshakeHeartbeat),
 
-            0x10 => Ok(ClientEvent::GameStart),
-            0x11 => Ok(ClientEvent::GameResume),
-            0x12 => Ok(ClientEvent::GamePause),
-            0x13 => Ok(ClientEvent::GameEnd),
-            0x14 => Ok(ClientEvent::GameReset),
-            0x15 => Ok(ClientEvent::GameSelect),
-            0x16 => Ok(ClientEvent::GameCreate),
+            0x10 => Ok(Self::GameStart),
+            0x11 => Ok(Self::GameResume),
+            0x12 => Ok(Self::GamePause),
+            0x13 => Ok(Self::GameEnd),
+            0x14 => Ok(Self::GameReset),
+            0x15 => Ok(Self::GameSelect),
+            0x16 => Ok(Self::GameCreate),
 
-            0x20 => Ok(ClientEvent::GameScoreHomeFT),
-            0x21 => Ok(ClientEvent::GameScoreHome2FG),
-            0x22 => Ok(ClientEvent::GameScoreHome3FG),
+            0x20 => Ok(Self::GameScoreHomeFT),
+            0x21 => Ok(Self::GameScoreHome2FG),
+            0x22 => Ok(Self::GameScoreHome3FG),
 
-            0x30 => Ok(ClientEvent::GameScoreAwayFT),
-            0x31 => Ok(ClientEvent::GameScoreAway2FG),
-            0x32 => Ok(ClientEvent::GameScoreAway3FG),
+            0x30 => Ok(Self::GameScoreAwayFT),
+            0x31 => Ok(Self::GameScoreAway2FG),
+            0x32 => Ok(Self::GameScoreAway3FG),
 
-            0x40 => Ok(ClientEvent::DeviceDisconnect),
-            0x41 => Ok(ClientEvent::DeviceAssignGame),
+            0x40 => Ok(Self::DeviceDisconnect),
+            0x41 => Ok(Self::DeviceAssignGame),
 
             _ => Err(""),
         }

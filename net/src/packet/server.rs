@@ -1,11 +1,14 @@
+//! Server-to-client wire packet implementation.
+
 use crate::{ServerEvent, layout};
 
 #[cfg(feature = "serde")]
 use crate::packet::serialize_data;
 
-static PACKET_MAGIC: u8 = 0x42;
-static PACKET_VERSION: u8 = 0x01;
+const PACKET_MAGIC: u8 = 0x42;
+const PACKET_VERSION: u8 = 0x01;
 
+/// 64-byte packet sent from the server to a client.
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -21,6 +24,8 @@ pub struct ServerPacket {
 }
 
 impl ServerPacket {
+    /// Constructs a new [`ServerPacket`] and computes its CRC checksum.
+    #[must_use]
     pub fn new(event: ServerEvent, sequence_id: u8, data: [u8; layout::DATA_SIZE]) -> Self {
         let mut packet = Self {
             magic: PACKET_MAGIC,
@@ -36,6 +41,8 @@ impl ServerPacket {
         packet
     }
 
+    /// Serializes this packet into a 64-byte array.
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; layout::PACKET_SIZE] {
         let mut bytes = [0u8; layout::PACKET_SIZE];
 
@@ -50,6 +57,7 @@ impl ServerPacket {
         bytes
     }
 
+    /// Parses and validates a [`ServerPacket`] from a 64-byte array.
     pub fn from_bytes(buffer: [u8; layout::PACKET_SIZE]) -> Result<Self, &'static str> {
         if buffer[layout::MAGIC] != PACKET_MAGIC {
             return Err("magic");
@@ -85,18 +93,26 @@ impl ServerPacket {
         crc
     }
 
+    /// Returns the [`ServerEvent`] of this packet.
+    #[must_use]
     pub fn event(&self) -> ServerEvent {
         self.event
     }
 
+    /// Returns the sequence identifier of this packet.
+    #[must_use]
     pub fn sequence_id(&self) -> u8 {
         self.sequence_id
     }
 
+    /// Returns the protocol version of this packet.
+    #[must_use]
     pub fn version(&self) -> u8 {
         self.version
     }
 
+    /// Returns the 59-byte payload of this packet.
+    #[must_use]
     pub fn data(self) -> [u8; layout::DATA_SIZE] {
         self.data
     }

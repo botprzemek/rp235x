@@ -1,195 +1,191 @@
-use crate::peripherals::{NetPeripherals, TrngPeripherals};
-use crate::state::{Input, Machine};
-use crate::{
-    core0::{
-        cyw43::{Cyw43, cyw43_task},
-        net::{Net, net_task},
-    },
-    state::GAME_STATE,
-};
+//! Inherent state handlers on [`Machine`] and the UDP client task.
+
 use basketball::Game;
+use config::Config;
 use config::flash::FlashReader;
-use config::{Config, print::Print};
-use defmt::unwrap;
-use defmt::{error, info};
+use config::print::Print;
 use embassy_executor::Spawner;
-use embassy_net::{
-    Stack,
-    udp::{PacketMetadata, UdpSocket},
-};
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
-use net::ServerPacket;
+use embassy_futures::select::{self, Either};
+use embassy_net::udp::{PacketMetadata, UdpSocket};
+use embassy_net::{IpAddress, IpEndpoint, Stack};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::signal::Signal;
+use embassy_time::{Duration, Ticker, Timer};
+use net::event::ClientEvent;
+use net::layout::PACKET_SIZE;
+use net::{ClientPacket, Device, DeviceType, ServerPacket};
 use static_cell::StaticCell;
 
+use crate::core0::cyw43::{Cyw43, cyw43_task};
+use crate::core0::net::{Net, net_task};
+use crate::peripherals::{NetPeripherals, TrngPeripherals};
+use crate::state::{GAME_STATE, Input, Machine};
+
+/// Signal emitted by Core 1 once its HUB75 display task has been spawned.
 pub static CORE1_READY_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
-static X_UDP_RX_BUFFER: StaticCell<[u8; 512]> = StaticCell::new();
-static X_UDP_TX_BUFFER: StaticCell<[u8; 512]> = StaticCell::new();
+static UDP_RX_BUFFER: StaticCell<[u8; 512]> = StaticCell::new();
+static UDP_TX_BUFFER: StaticCell<[u8; 512]> = StaticCell::new();
 
-pub trait Handler {
-    async fn handle_boot(&mut self) -> ();
-    async fn handle_sync(&mut self) -> ();
-    async fn handle_networking(
-        &mut self,
-        spawner: Spawner,
-        net: NetPeripherals,
-        trng: TrngPeripherals,
-    ) -> ();
-    async fn _handle_running(&mut self) -> ();
-    async fn _handle_error_recovery(&mut self) -> ();
-}
-
-impl Handler for Machine {
-    async fn handle_boot(&mut self) {
-        let config = match Config::read() {
-            Ok(config) => config,
-            Err(_) => return self.transition(Input::BootFailed),
+impl Machine {
+    /// Verifies and prints the flash configuration during boot.
+    pub async fn handle_boot(&mut self) {
+        let Ok(config) = Config::read() else {
+            self.transition(Input::BootFailed);
+            return;
         };
 
         if config.print().is_err() {
-            return self.transition(Input::BootFailed);
+            self.transition(Input::BootFailed);
+            return;
         }
 
         self.transition(Input::BootSuccess);
     }
 
-    async fn handle_sync(&mut self) {
+    /// Waits for Core 1 to signal readiness.
+    pub async fn handle_sync(&mut self) {
         CORE1_READY_SIGNAL.wait().await;
 
         self.transition(Input::CoreSynced);
     }
 
-    async fn handle_networking(
+    /// Initializes the TRNG, CYW43 Wi-Fi chip, DHCPv4 stack, and UDP synchronization task.
+    pub async fn handle_networking(
         &mut self,
         spawner: Spawner,
         net: NetPeripherals,
         trng: TrngPeripherals,
     ) {
         let seed = TrngPeripherals::init(trng).await;
-        let (net_device, mut control, runner) = Cyw43::init(net).await;
-        spawner.spawn(unwrap!(cyw43_task(runner)));
+        let mut cyw43_driver = Cyw43::init(net).await;
+        spawner.spawn(defmt::unwrap!(cyw43_task(cyw43_driver.runner)));
 
-        let (stack, runner) = Net::init_stack(&mut control, net_device, seed).await;
-        spawner.spawn(unwrap!(net_task(runner)));
+        let initialized_net =
+            Net::init_stack(&mut cyw43_driver.control, cyw43_driver.net_driver, seed).await;
+        spawner.spawn(defmt::unwrap!(net_task(initialized_net.runner)));
 
-        let config = Config::read().unwrap();
-        Net::init_wifi(&mut control, config).await;
-        stack.wait_link_up().await;
-        stack.wait_config_up().await;
+        let config = Config::read().expect("verified flash config must be readable");
+        Net::init_wifi(&mut cyw43_driver.control, config).await;
+        initialized_net.stack.wait_link_up().await;
+        initialized_net.stack.wait_config_up().await;
 
-        match stack.config_v4() {
+        match initialized_net.stack.config_v4() {
             Some(config_v4) => {
                 defmt::info!(
                     "NetworkConfig::Address               {}",
                     &config_v4.address
                 );
-                defmt::info!(
-                    "NetworkConfig::Gateway               {}",
-                    &config_v4.gateway.unwrap()
-                );
+                if let Some(ref gateway) = config_v4.gateway {
+                    defmt::info!("NetworkConfig::Gateway               {}", gateway);
+                }
 
                 self.transition(Input::WifiConnected);
             }
             None => self.transition(Input::WifiFailed),
         }
 
-        spawner.spawn(unwrap!(udp_task(stack)));
+        spawner.spawn(defmt::unwrap!(udp_task(initialized_net.stack)));
     }
 
-    async fn _handle_running(&mut self) {}
+    #[allow(dead_code)]
+    async fn handle_running(&mut self) {}
 
-    async fn _handle_error_recovery(&mut self) {
-        embassy_time::Timer::after_secs(1).await;
+    #[allow(dead_code)]
+    async fn handle_error_recovery(&mut self) {
+        Timer::after_secs(1).await;
     }
 }
 
-use net::{ClientPacket, Device, DeviceType, event::ClientEvent};
+/// Background Embassy task discovering the master server over UDP and receiving 60 Hz game frames.
 #[embassy_executor::task]
 pub async fn udp_task(stack: Stack<'static>) {
-    let rx_buffer = X_UDP_RX_BUFFER.init([0; 512]);
-    let tx_buffer = X_UDP_TX_BUFFER.init([0; 512]);
+    let receive_buffer = UDP_RX_BUFFER.init([0; 512]);
+    let transmit_buffer = UDP_TX_BUFFER.init([0; 512]);
 
-    let mut rx_meta = [PacketMetadata::EMPTY; 2];
-    let mut tx_meta = [PacketMetadata::EMPTY; 2];
+    let mut receive_metadata = [PacketMetadata::EMPTY; 2];
+    let mut transmit_metadata = [PacketMetadata::EMPTY; 2];
 
-    let mut socket = UdpSocket::new(stack, &mut rx_meta, rx_buffer, &mut tx_meta, tx_buffer);
+    let mut socket = UdpSocket::new(
+        stack,
+        &mut receive_metadata,
+        receive_buffer,
+        &mut transmit_metadata,
+        transmit_buffer,
+    );
 
-    if let Err(e) = socket.bind(8001) {
-        error!("socket_error: {:?}", e);
+    if let Err(error) = socket.bind(8001) {
+        defmt::error!("socket_error: {:?}", error);
         return;
     }
 
-    let config = Config::read().unwrap();
+    let config = Config::read().expect("verified flash config must be readable");
     let device_bytes = Device::from_config(DeviceType::Worker, config)
-        .unwrap()
+        .expect("flash config must produce a valid Worker Device")
         .to_bytes();
 
-    let broadcast_endpoint =
-        embassy_net::IpEndpoint::new(embassy_net::IpAddress::v4(255, 255, 255, 255), 9000);
+    let broadcast_endpoint = IpEndpoint::new(IpAddress::v4(255, 255, 255, 255), 9000);
 
-    let mut rx_packet_buf = [0u8; net::layout::PACKET_SIZE];
+    let mut packet_buffer = [0u8; PACKET_SIZE];
 
     loop {
-        info!("[WORKER] Szukanie mastera w sieci (Broadcast)...");
-        let mut master_endpoint: Option<embassy_net::IpEndpoint> = None;
+        defmt::info!("[WORKER] Szukanie mastera w sieci (Broadcast)...");
 
-        while master_endpoint.is_none() {
+        let master_endpoint = loop {
             let client_packet = ClientPacket::new(ClientEvent::HandshakeRequest, 0, device_bytes);
             let packet_bytes = client_packet.to_bytes();
 
-            if let Err(e) = socket.send_to(&packet_bytes, broadcast_endpoint).await {
-                error!("broadcast_send_error: {:?}", e);
+            if let Err(error) = socket.send_to(&packet_bytes, broadcast_endpoint).await {
+                defmt::error!("broadcast_send_error: {:?}", error);
             }
 
-            let recv_future = socket.recv_from(&mut rx_packet_buf);
+            let receive_future = socket.recv_from(&mut packet_buffer);
             let (size, remote_endpoint) = match embassy_time::with_timeout(
-                embassy_time::Duration::from_millis(500),
-                recv_future,
+                Duration::from_millis(500),
+                receive_future,
             )
             .await
             {
                 Ok(Ok((size, remote_endpoint))) => (size, remote_endpoint),
-                Ok(Err(e)) => {
-                    info!("{}", e);
+                Ok(Err(error)) => {
+                    defmt::info!("{}", error);
                     continue;
                 }
-                Err(e) => {
-                    info!("{}", e);
+                Err(timeout_error) => {
+                    defmt::info!("{}", timeout_error);
                     continue;
                 }
             };
 
-            if size != net::layout::PACKET_SIZE {
+            if size != PACKET_SIZE {
                 continue;
             }
 
-            let _packet = match ServerPacket::from_bytes(rx_packet_buf) {
-                Ok(packet) => packet,
-                Err(_) => continue,
-            };
+            if ServerPacket::from_bytes(packet_buffer).is_err() {
+                continue;
+            }
 
-            info!(
+            defmt::info!(
                 "[WORKER] Znaleziono mastera pod adresem: {}. Handshake zakończony!",
                 remote_endpoint
             );
-            master_endpoint = Some(remote_endpoint.endpoint);
-        }
+            break remote_endpoint.endpoint;
+        };
 
-        let master_endpoint = master_endpoint.unwrap();
-        info!("[WORKER] Przejście do głównej pętli odbierania danych.");
+        defmt::info!("[WORKER] Przejście do głównej pętli odbierania danych.");
 
-        let mut keepalive_timer = embassy_time::Ticker::every(embassy_time::Duration::from_secs(3));
+        let mut keepalive_timer = Ticker::every(Duration::from_secs(3));
         let mut missed_heartbeats: u8 = 0;
-        const MAX_MISSED_HEARTS: u8 = 3;
+        const MAX_MISSED_HEARTBEATS: u8 = 3;
 
         loop {
-            let recv_fut = socket.recv_from(&mut rx_packet_buf);
-            let tick_fut = keepalive_timer.next();
+            let receive_future = socket.recv_from(&mut packet_buffer);
+            let tick_future = keepalive_timer.next();
 
-            match embassy_futures::select::select(recv_fut, tick_fut).await {
-                embassy_futures::select::Either::First(res) => match res {
+            match select::select(receive_future, tick_future).await {
+                Either::First(result) => match result {
                     Ok((size, remote_endpoint)) => {
-                        if size != net::layout::PACKET_SIZE {
+                        if size != PACKET_SIZE {
                             continue;
                         }
 
@@ -199,34 +195,37 @@ pub async fn udp_task(stack: Stack<'static>) {
 
                         missed_heartbeats = 0;
 
-                        let packet = match ServerPacket::from_bytes(rx_packet_buf) {
-                            Ok(packet) => packet,
-                            Err(_) => continue,
+                        let Ok(packet) = ServerPacket::from_bytes(packet_buffer) else {
+                            continue;
                         };
 
-                        let game_ref = GAME_STATE.lock().await;
-                        *game_ref.borrow_mut() = Game::try_from(packet).unwrap();
+                        if let Ok(game) = Game::try_from(packet) {
+                            let game_ref = GAME_STATE.lock().await;
+                            *game_ref.borrow_mut() = game;
+                        }
                     }
-                    Err(e) => {
-                        error!("udp_rx_error: {:?}", e);
+                    Err(error) => {
+                        defmt::error!("udp_rx_error: {:?}", error);
                     }
                 },
-                embassy_futures::select::Either::Second(_) => {
+                Either::Second(()) => {
                     let keepalive_packet =
                         ClientPacket::new(ClientEvent::HandshakeHeartbeat, 0, device_bytes);
                     let packet_bytes = keepalive_packet.to_bytes();
 
-                    if let Err(e) = socket.send_to(&packet_bytes, master_endpoint).await {
-                        error!("keepalive_send_error: {:?}", e);
+                    if let Err(error) = socket.send_to(&packet_bytes, master_endpoint).await {
+                        defmt::error!("keepalive_send_error: {:?}", error);
                     } else {
-                        info!("[WORKER] Wysłano keepalive do mastera");
+                        defmt::info!("[WORKER] Wysłano keepalive do mastera");
 
                         missed_heartbeats += 1;
-                        if missed_heartbeats < MAX_MISSED_HEARTS {
+                        if missed_heartbeats < MAX_MISSED_HEARTBEATS {
                             continue;
                         }
 
-                        info!("[WORKER] Brak odpowiedzi od Mastera przez 9s! Utracono połączenie.");
+                        defmt::info!(
+                            "[WORKER] Brak odpowiedzi od Mastera przez 9s! Utracono połączenie."
+                        );
 
                         break;
                     }

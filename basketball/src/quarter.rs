@@ -1,3 +1,7 @@
+//! Basketball game period (quarter) representation.
+
+/// Current period of a basketball [`crate::Game`].
+#[non_exhaustive]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -12,6 +16,7 @@ pub enum Quarter {
 
 impl TryFrom<u8> for Quarter {
     type Error = &'static str;
+
     fn try_from(quarter: u8) -> Result<Self, Self::Error> {
         match quarter {
             0x00 => Ok(Self::None),

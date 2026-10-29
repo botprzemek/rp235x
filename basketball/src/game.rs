@@ -1,7 +1,29 @@
+//! Basketball [`Game`] state machine, clock decomposition, and wire serialization.
+
+use core::time::Duration;
+
 use net::{ClientPacket, ServerPacket};
 
-use crate::{Discipline, Quarter, Scorable, Score, State, Team, layout};
+use crate::{Discipline, Quarter, Scorable, Score, Scores, State, Team, layout};
 
+/// Decomposed regulation clock time in minutes, seconds, and centiseconds.
+#[non_exhaustive]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct RegulationTime {
+    pub minutes: u8,
+    pub seconds: u8,
+    pub centiseconds: u8,
+}
+
+/// Decomposed shot clock time in seconds and centiseconds.
+#[non_exhaustive]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ClockTime {
+    pub seconds: u8,
+    pub centiseconds: u8,
+}
+
+/// State and score of a basketball game.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -19,8 +41,15 @@ pub struct Game {
     clock_millis: u32,
 }
 
+impl Default for Game {
+    fn default() -> Self {
+        Self::new(Discipline::Fiba5vs5)
+    }
+}
+
 impl TryFrom<ClientPacket> for Game {
     type Error = &'static str;
+
     fn try_from(packet: ClientPacket) -> Result<Self, Self::Error> {
         Self::from_bytes(&packet.data())
     }
@@ -28,51 +57,61 @@ impl TryFrom<ClientPacket> for Game {
 
 impl TryFrom<ServerPacket> for Game {
     type Error = &'static str;
+
     fn try_from(packet: ServerPacket) -> Result<Self, Self::Error> {
         Self::from_bytes(&packet.data())
     }
 }
 
 impl Scorable for Game {
-    fn score(&mut self, team: Team, score: Score) {
+    fn add_score(&mut self, team: Team, score: Score) {
         match team {
             Team::Home => self.home_score = self.home_score.saturating_add(score.into()),
             Team::Away => self.away_score = self.away_score.saturating_add(score.into()),
         }
     }
 
-    fn get_score(&self, team: Team) -> u16 {
+    fn score(&self, team: Team) -> u16 {
         match team {
             Team::Home => self.home_score,
             Team::Away => self.away_score,
         }
     }
 
-    fn get_scores(&self) -> (u16, u16) {
-        (self.home_score, self.away_score)
+    fn scores(&self) -> Scores {
+        Scores {
+            home: self.home_score,
+            away: self.away_score,
+        }
     }
 }
 
 impl Game {
+    /// Creates a new [`Game`] with ID `1` and the given `discipline`.
+    #[must_use]
     pub fn new(discipline: Discipline) -> Self {
-        Self::with_id(1, discipline)
+        Self::new_with_id(1, discipline)
     }
 
-    pub fn with_id(id: u16, discipline: Discipline) -> Self {
-        let (quarter, regulation_millis, clock_millis) = discipline.map();
+    /// Creates a new [`Game`] with the given `id` and `discipline`.
+    #[must_use]
+    pub fn new_with_id(id: u16, discipline: Discipline) -> Self {
+        let config = discipline.config();
 
         Self {
             id,
             state: State::Idle,
             discipline,
-            quarter,
+            quarter: config.initial_quarter,
             home_score: 0,
             away_score: 0,
-            regulation_millis,
-            clock_millis,
+            regulation_millis: config.regulation_millis,
+            clock_millis: config.clock_millis,
         }
     }
 
+    /// Creates a zero-clock idle [`Game`] suitable for static initialization.
+    #[must_use]
     pub const fn empty() -> Self {
         Self {
             id: 1,
@@ -86,42 +125,45 @@ impl Game {
         }
     }
 
+    /// Returns the game identifier.
+    #[must_use]
     pub fn id(&self) -> u16 {
         self.id
     }
 
+    /// Sets the game identifier.
     pub fn set_id(&mut self, id: u16) {
         self.id = id;
     }
 
-    pub fn get_state(&self) -> State {
-        self.state
-    }
-
-    pub fn get_quarter(&self) -> Quarter {
-        self.quarter
-    }
-
-    pub fn get_regulation_millis(&self) -> u32 {
-        self.regulation_millis
-    }
-
-    pub fn get_regulation_time(&self) -> (u8, u8, u8) {
-        let total_secs = self.regulation_millis / 1000;
-        let minutes = (total_secs / 60) as u8;
-        let seconds = (total_secs % 60) as u8;
+    /// Returns the decomposed regulation clock [`RegulationTime`].
+    #[must_use]
+    pub fn regulation_time(&self) -> RegulationTime {
+        let total_seconds = self.regulation_millis / 1000;
+        let minutes = (total_seconds / 60) as u8;
+        let seconds = (total_seconds % 60) as u8;
         let centiseconds = ((self.regulation_millis % 1000) / 10) as u8;
 
-        (minutes, seconds, centiseconds)
+        RegulationTime {
+            minutes,
+            seconds,
+            centiseconds,
+        }
     }
 
-    pub fn get_clock_time(&self) -> (u8, u8) {
+    /// Returns the decomposed shot clock [`ClockTime`].
+    #[must_use]
+    pub fn clock_time(&self) -> ClockTime {
         let seconds = (self.clock_millis / 1000) as u8;
         let centiseconds = ((self.clock_millis % 1000) / 10) as u8;
 
-        (seconds, centiseconds)
+        ClockTime {
+            seconds,
+            centiseconds,
+        }
     }
 
+    /// Deserializes a [`Game`] from a wire payload byte slice.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
         let mut home_score = [0u8; 2];
         let mut away_score = [0u8; 2];
@@ -155,6 +197,8 @@ impl Game {
         })
     }
 
+    /// Serializes this [`Game`] into a wire payload array.
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; layout::DATA_SIZE] {
         let mut bytes = [0u8; layout::DATA_SIZE];
 
@@ -179,35 +223,43 @@ impl Game {
         bytes
     }
 
+    /// Returns the current [`State`] of the game.
+    #[must_use]
     pub fn state(&self) -> State {
         self.state
     }
 
+    /// Sets the [`State`] of the game.
     pub fn set_state(&mut self, state: State) {
-        self.state = state
+        self.state = state;
     }
 
+    /// Returns the [`Discipline`] of the game.
+    #[must_use]
     pub fn discipline(&self) -> Discipline {
         self.discipline
     }
 
+    /// Returns the current [`Quarter`] of the game.
+    #[must_use]
     pub fn quarter(&self) -> Quarter {
         self.quarter
     }
 
+    /// Returns the remaining regulation time in milliseconds.
+    #[must_use]
     pub fn regulation_millis(&self) -> u32 {
         self.regulation_millis
     }
 
+    /// Returns the remaining shot clock time in milliseconds.
+    #[must_use]
     pub fn clock_millis(&self) -> u32 {
         self.clock_millis
     }
 
-    pub fn transition_to(&mut self, state: State) {
-        self.set_state(state);
-    }
-
-    pub fn tick(&mut self, delta: core::time::Duration) {
+    /// Advances the game clock by `delta` if the game is currently [`State::Running`].
+    pub fn tick(&mut self, delta: Duration) {
         match self.state {
             State::Idle => self.handle_idle(),
             State::Running => self.handle_running(delta),
@@ -217,6 +269,7 @@ impl Game {
         }
     }
 
+    /// Advances the game to the next quarter once regulation time reaches zero.
     pub fn next_quarter(&mut self) {
         if self.regulation_millis != 0 {
             return;
@@ -234,13 +287,14 @@ impl Game {
             }
         };
 
-        self.regulation_millis = self.discipline.map().1;
-        self.clock_millis = self.discipline.map().2;
+        let config = self.discipline.config();
+        self.regulation_millis = config.regulation_millis;
+        self.clock_millis = config.clock_millis;
     }
 
     fn handle_idle(&mut self) {}
 
-    fn handle_running(&mut self, delta: core::time::Duration) {
+    fn handle_running(&mut self, delta: Duration) {
         let delta_millis = delta.as_millis() as u32;
 
         self.regulation_millis = self.regulation_millis.saturating_sub(delta_millis);
@@ -256,10 +310,12 @@ impl Game {
 
     fn handle_end(&mut self) {}
 
+    /// Pauses the game clock.
     pub fn pause(&mut self) {
         self.set_state(State::Paused);
     }
 
+    /// Resumes (starts) the game clock.
     pub fn resume(&mut self) {
         self.set_state(State::Running);
     }

@@ -1,38 +1,49 @@
+//! CYW43439 Wi-Fi chip initialization and PIO SPI runner task.
+
+use core::hint;
+use core::mem;
+
+use cyw43::{A4, Aligned, Control, NetDriver, SpiBus, State};
+use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
+use embassy_rp::dma::Channel;
+use embassy_rp::gpio::{Level, Output};
+use embassy_rp::peripherals;
+use embassy_rp::pio::Pio;
+use static_cell::StaticCell;
+
 use crate::interrupts::Irqs;
 use crate::peripherals::NetPeripherals;
 
-use cyw43::{A4, Aligned, Control, NetDriver, SpiBus, State, new};
-use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
-use embassy_rp::{
-    dma::Channel,
-    gpio::{Level, Output},
-    peripherals,
-    pio::Pio,
-};
-use static_cell::StaticCell;
+type Runner<'driver> =
+    cyw43::Runner<'driver, SpiBus<Output<'driver>, PioSpi<'driver, peripherals::PIO0, 0>>>;
 
-type Runner<'a> = cyw43::Runner<'a, SpiBus<Output<'a>, PioSpi<'a, peripherals::PIO0, 0>>>;
+/// Initializer for the CYW43 wireless driver, control handle, and background runner.
+pub struct Cyw43Driver {
+    pub net_driver: NetDriver<'static>,
+    pub control: Control<'static>,
+    pub runner: Runner<'static>,
+}
 
+/// CYW43 hardware initialization helper.
 pub struct Cyw43;
 
 static WIFI_STATE: StaticCell<State> = StaticCell::new();
 
-const FW_MASK: usize = 0x5A5A5A5A;
-const FW_ADDR: usize = 0x10200000 ^ FW_MASK;
-const FW_LEN: usize = 231077;
+const FIRMWARE_MASK: usize = 0x5a5a_5a5a;
+const FIRMWARE_ADDR: usize = 0x1020_0000 ^ FIRMWARE_MASK;
+const FIRMWARE_LEN: usize = 231_077;
 
-const NVRAM_MASK: usize = 0x5A5A5A5A;
-const NVRAM_ADDR: usize = 0x10250000 ^ NVRAM_MASK;
+const NVRAM_MASK: usize = 0x5a5a_5a5a;
+const NVRAM_ADDR: usize = 0x1025_0000 ^ NVRAM_MASK;
 const NVRAM_LEN: usize = 742;
 
 impl Cyw43 {
-    pub async fn init(
-        peripherals: NetPeripherals,
-    ) -> (NetDriver<'static>, Control<'static>, Runner<'static>) {
+    /// Initializes the CYW43 chip over PIO SPI using firmware and NVRAM stored in flash.
+    pub async fn init(peripherals: NetPeripherals) -> Cyw43Driver {
         let state = WIFI_STATE.init(State::new());
 
-        let pwr = Output::new(peripherals.pwr, Level::High);
-        let cs = Output::new(peripherals.cs, Level::High);
+        let power_pin = Output::new(peripherals.pwr, Level::High);
+        let chip_select_pin = Output::new(peripherals.cs, Level::High);
         let mut pio = Pio::new(peripherals.pio, Irqs);
         let dma = Channel::new(peripherals.dma, Irqs);
 
@@ -41,7 +52,7 @@ impl Cyw43 {
             pio.sm0,
             DEFAULT_CLOCK_DIVIDER,
             pio.irq0,
-            cs,
+            chip_select_pin,
             peripherals.dio,
             peripherals.clk,
             dma,
@@ -50,20 +61,30 @@ impl Cyw43 {
         let firmware = Self::load_firmware();
         let nvram = Self::load_nvram();
 
-        new(state, pwr, spi, firmware, nvram).await
+        let (net_driver, control, runner) =
+            cyw43::new(state, power_pin, spi, firmware, nvram).await;
+
+        Cyw43Driver {
+            net_driver,
+            control,
+            runner,
+        }
     }
 
     #[inline(always)]
-    fn load_firmware() -> &'static Aligned<A4, [u8; FW_LEN]> {
-        let address = FW_ADDR ^ FW_MASK;
+    fn load_firmware() -> &'static Aligned<A4, [u8; FIRMWARE_LEN]> {
+        let address = FIRMWARE_ADDR ^ FIRMWARE_MASK;
 
         assert!(
-            address.is_multiple_of(core::mem::align_of::<Aligned<A4, [u8; FW_LEN]>>()),
-            "Memory alignment violation detected at hardware boundary."
+            address.is_multiple_of(mem::align_of::<Aligned<A4, [u8; FIRMWARE_LEN]>>()),
+            "Memory alignment violation detected at hardware boundary for CYW43 firmware at {address:#x}"
         );
 
-        let ptr = core::hint::black_box(address as *const Aligned<A4, [u8; FW_LEN]>);
-        unsafe { &*ptr }
+        let pointer = hint::black_box(address as *const Aligned<A4, [u8; FIRMWARE_LEN]>);
+        // SAFETY: `address` is 4-byte aligned (checked above) and points to the CYW43 firmware blob
+        // flashed at `0x1020_0000` with length `FIRMWARE_LEN`.
+        // Justification: Zero-copy access to memory-mapped XIP flash on RP235x.
+        unsafe { &*pointer }
     }
 
     #[inline(always)]
@@ -71,15 +92,19 @@ impl Cyw43 {
         let address = NVRAM_ADDR ^ NVRAM_MASK;
 
         assert!(
-            address.is_multiple_of(core::mem::align_of::<Aligned<A4, [u8; NVRAM_LEN]>>()),
-            "Memory alignment violation detected at hardware boundary."
+            address.is_multiple_of(mem::align_of::<Aligned<A4, [u8; NVRAM_LEN]>>()),
+            "Memory alignment violation detected at hardware boundary for CYW43 NVRAM at {address:#x}"
         );
 
-        let ptr = core::hint::black_box(address as *const Aligned<A4, [u8; NVRAM_LEN]>);
-        unsafe { &*ptr }
+        let pointer = hint::black_box(address as *const Aligned<A4, [u8; NVRAM_LEN]>);
+        // SAFETY: `address` is 4-byte aligned (checked above) and points to the CYW43 NVRAM blob
+        // flashed at `0x1025_0000` with length `NVRAM_LEN`.
+        // Justification: Zero-copy access to memory-mapped XIP flash on RP235x.
+        unsafe { &*pointer }
     }
 }
 
+/// Background Embassy task driving the CYW43 PIO SPI bus.
 #[embassy_executor::task]
 pub async fn cyw43_task(runner: Runner<'static>) -> ! {
     runner.run().await

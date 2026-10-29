@@ -1,11 +1,18 @@
+//! Utility script for writing CYW43 NVRAM binary blobs.
+
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 
+struct NvramBlob {
+    board_name: &'static str,
+    bytes: &'static [u8],
+}
+
 fn main() -> io::Result<()> {
     let nvrams = [
-        (
-            "rp2040",
-            &b"NVRAMRev=$Rev$\x00\
+        NvramBlob {
+            board_name: "rp2040",
+            bytes: &b"NVRAMRev=$Rev$\x00\
 manfid=0x2d0\x00\
 prodid=0x0727\x00\
 vendid=0x14e4\x00\
@@ -52,10 +59,10 @@ spurconfig=0x3\x00\
 glitch_based_crsmin=1\x00\
 btc_mode=1\x00\
 \x00\x00"[..],
-        ),
-        (
-            "sterling_lwb+",
-            &b"NVRAMRev=$Rev$\x00\
+        },
+        NvramBlob {
+            board_name: "sterling_lwb+",
+            bytes: &b"NVRAMRev=$Rev$\x00\
 manfid=0x2d0\x00\
 prodid=0x0727\x00\
 vendid=0x14e4\x00\
@@ -101,17 +108,18 @@ bt_default_ant=0\x00\
 edonthd20l=-72\x00\
 edoffthd20ul=-78\x00\
 \x00\x00"[..],
-        ),
+        },
     ];
 
-    for (name, bytes) in nvrams {
-        let file = File::create(format!("nvram_{}.bin", name))?;
+    for nvram in nvrams {
+        let board_name = nvram.board_name;
+        let file = File::create(format!("nvram_{board_name}.bin"))?;
         let mut writer = BufWriter::new(file);
 
-        writer.write_all(bytes)?;
+        writer.write_all(nvram.bytes)?;
         writer.flush()?;
 
-        println!("Wrote {}", name);
+        println!("Wrote {board_name}");
     }
 
     Ok(())

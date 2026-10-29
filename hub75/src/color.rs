@@ -1,22 +1,37 @@
+//! RGB color constants and color-space helper functions.
+
+/// 24-bit RGB color triple `[red, green, blue]`.
 pub type Color = [u8; 3];
 
+/// Pure red RGB color.
 pub const RED: Color = [255, 0, 0];
+
+/// Pure green RGB color.
 pub const GREEN: Color = [0, 255, 0];
+
+/// Pure blue RGB color.
 pub const BLUE: Color = [0, 0, 255];
+
+/// Pure white RGB color.
 pub const WHITE: Color = [255, 255, 255];
+
+/// Pure black (off) RGB color.
 pub const BLACK: Color = [0, 0, 0];
 
-/// Skaluje składowe koloru RGB proporcjonalnie do zadanej jasności w procentach (0..=100%).
+/// Scales RGB channels proportionally to `brightness_percent` (`0..=100`).
+#[must_use]
 #[inline(always)]
 pub fn with_brightness(color: Color, brightness_percent: u8) -> Color {
-    let factor = brightness_percent.min(100) as u16;
+    let factor = u16::from(brightness_percent.min(100));
     [
-        ((color[0] as u16 * factor) / 100) as u8,
-        ((color[1] as u16 * factor) / 100) as u8,
-        ((color[2] as u16 * factor) / 100) as u8,
+        ((u16::from(color[0]) * factor) / 100) as u8,
+        ((u16::from(color[1]) * factor) / 100) as u8,
+        ((u16::from(color[2]) * factor) / 100) as u8,
     ]
 }
 
+/// Converts a hue angle in degrees (`0..360`) into a saturated RGB [`Color`].
+#[must_use]
 #[inline(always)]
 pub fn hue_to_rgb(hue: u16) -> Color {
     let hue_normalized = hue % 360;

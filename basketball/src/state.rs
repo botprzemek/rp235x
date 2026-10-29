@@ -1,3 +1,7 @@
+//! Lifecycle state of a basketball [`crate::Game`].
+
+/// Execution state of a basketball game clock and match.
+#[non_exhaustive]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -12,6 +16,7 @@ pub enum State {
 
 impl TryFrom<u8> for State {
     type Error = &'static str;
+
     fn try_from(state: u8) -> Result<Self, Self::Error> {
         match state {
             0x00 => Ok(Self::Idle),

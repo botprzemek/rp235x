@@ -1,21 +1,24 @@
-use crate::Config;
-
-#[cfg(feature = "std")]
-use crate::{ConfigError, DeviceConfig, NetworkConfig};
+//! Diagnostic printing for [`Config`].
 
 #[cfg(feature = "std")]
 use std::{format, println};
 
 #[cfg(feature = "defmt")]
-use crate::{ConfigError, DeviceConfig};
-
-#[cfg(feature = "defmt")]
 use defmt::info;
 
+use crate::Config;
+#[cfg(feature = "std")]
+use crate::NetworkConfig;
+#[cfg(any(feature = "std", feature = "defmt"))]
+use crate::{ConfigError, DeviceConfig};
+
+/// Formats and outputs a [`Config`] to the console or `defmt` logger.
 pub trait Print {
+    /// Outputs the configuration details.
     #[cfg(feature = "defmt")]
     fn print(&self) -> Result<(), ConfigError>;
 
+    /// Outputs the configuration details in a formatted table.
     #[cfg(feature = "std")]
     fn print(&self) -> Result<(), ConfigError>;
 }
@@ -28,11 +31,11 @@ impl Print for Config {
     fn print(&self) -> Result<(), ConfigError> {
         info!(
             "DeviceConfig::SerialNumber           {}",
-            &self.get_serial_number()?
+            &self.serial_number()?
         );
         info!(
             "DeviceConfig::DeviceID               {}",
-            &self.get_device_id()?
+            &self.device_id()?
         );
 
         Ok(())
@@ -46,22 +49,22 @@ impl Print for Config {
 
         println!(
             "│ {:<width$} │",
-            format!("serial_number      {}", self.get_serial_number()?),
+            format!("serial_number      {}", self.serial_number()?),
             width = LINE_WIDTH - 2
         );
         println!(
             "│ {:<width$} │",
-            format!("device_id          {}", self.get_device_id()?),
+            format!("device_id          {}", self.device_id()?),
             width = LINE_WIDTH - 2
         );
         println!(
             "│ {:<width$} │",
-            format!("wifi_ssid          {}", self.get_wifi_ssid()?),
+            format!("wifi_ssid          {}", self.wifi_ssid()?),
             width = LINE_WIDTH - 2
         );
         println!(
             "│ {:<width$} │",
-            format!("wifi_password      {}", self.get_wifi_password()?),
+            format!("wifi_password      {}", self.wifi_password()?),
             width = LINE_WIDTH - 2
         );
 

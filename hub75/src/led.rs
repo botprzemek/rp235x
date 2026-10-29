@@ -1,31 +1,36 @@
-use crate::{BitplaneBuffer, LedOutputs, OutputPin};
+//! BCM frame scanning and shift-register clocking for [`LedOutputs`].
 
-impl<Output: OutputPin> LedOutputs<Output> {
+use crate::{BitplaneBuffer, LedOutputs, OutputPin, PinLevel};
+
+impl<P: OutputPin> LedOutputs<P> {
+    /// Selects the active scan row address (`0..16`) on the HUB75 address lines.
     #[inline(always)]
     pub fn set_row(&mut self, row: u8) {
-        self.a.set_level((row & 0x01) != 0);
-        self.b.set_level((row & 0x02) != 0);
-        self.c.set_level((row & 0x04) != 0);
-        self.d.set_level((row & 0x08) != 0);
-        self._e.set_low();
+        self.a.set_level(PinLevel::from((row & 0x01) != 0));
+        self.b.set_level(PinLevel::from((row & 0x02) != 0));
+        self.c.set_level(PinLevel::from((row & 0x04) != 0));
+        self.d.set_level(PinLevel::from((row & 0x08) != 0));
+        self.e.set_low();
     }
 
+    /// Shifts a single row bitplane slice out to the RGB data lines.
     #[inline(always)]
     pub fn clock_out_fast(&mut self, bitplane: &[u8]) {
-        for &mask in bitplane.iter() {
-            self.r1.set_level((mask & (1 << 0)) != 0);
-            self.g1.set_level((mask & (1 << 1)) != 0);
-            self.b1.set_level((mask & (1 << 2)) != 0);
+        for &mask in bitplane {
+            self.r1.set_level(PinLevel::from((mask & (1 << 0)) != 0));
+            self.g1.set_level(PinLevel::from((mask & (1 << 1)) != 0));
+            self.b1.set_level(PinLevel::from((mask & (1 << 2)) != 0));
 
-            self.r2.set_level((mask & (1 << 3)) != 0);
-            self.g2.set_level((mask & (1 << 4)) != 0);
-            self.b2.set_level((mask & (1 << 5)) != 0);
+            self.r2.set_level(PinLevel::from((mask & (1 << 3)) != 0));
+            self.g2.set_level(PinLevel::from((mask & (1 << 4)) != 0));
+            self.b2.set_level(PinLevel::from((mask & (1 << 5)) != 0));
 
             self.clk.set_high();
             self.clk.set_low();
         }
     }
 
+    /// Renders a full 8-bit BCM frame at 100% duty cycle.
     pub fn render_bcm_frame_sync<const WIDTH: usize, const HALF_HEIGHT: usize>(
         &mut self,
         bitplanes: &BitplaneBuffer<WIDTH, HALF_HEIGHT>,
@@ -33,13 +38,14 @@ impl<Output: OutputPin> LedOutputs<Output> {
         self.render_bcm_frame_sync_with_brightness(bitplanes, 100);
     }
 
+    /// Renders a full 8-bit BCM frame scaled by `brightness_percent` (`0..=100`).
     pub fn render_bcm_frame_sync_with_brightness<const WIDTH: usize, const HALF_HEIGHT: usize>(
         &mut self,
         bitplanes: &BitplaneBuffer<WIDTH, HALF_HEIGHT>,
         brightness_percent: u8,
     ) {
         const BASE_CYCLES: u32 = 50;
-        let brightness_factor = brightness_percent.min(100) as u32;
+        let brightness_factor = u32::from(brightness_percent.min(100));
 
         for bit in 0..8 {
             let full_cycles = BASE_CYCLES << bit;

@@ -1,3 +1,5 @@
+//! HTTP route handlers for REST API, static SSR assets, and WebSocket connections.
+
 mod api;
 mod static_html;
 mod websocket;
