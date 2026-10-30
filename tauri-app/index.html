@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-white">
+<head>
+    <meta charset="utf-8" />
+    <title>Scoreboard</title>
+    <link data-trunk rel="rust" data-bin="hydrate" data-cargo-no-default-features data-cargo-features="csr"/>
+    <link data-trunk rel="tailwind-css" href="src/assets/css/main.css"/>
+    <link data-trunk rel="copy-dir" href="src/assets/fonts"/>
+    <link data-trunk rel="copy-file" href="src/assets/scoreboard.png"/>
+    <link rel="preload" href="fonts/outfit.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/karla.woff2" as="font" type="font/woff2" crossorigin />
+    <style>
+        html.transparent-mode,
+        body.transparent-mode {
+            background: none !important;
+            background-color: transparent !important;
+        }
+    </style>
+</head>
+<body class="bg-white m-0 p-0 select-none"></body>
+</html>
