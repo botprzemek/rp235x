@@ -1,6 +1,6 @@
 //! Partitioning of RP235x hardware peripherals into functional groups.
 
-use embassy_rp::peripherals::CORE1;
+use embassy_rp::peripherals::{CORE1, FLASH, WATCHDOG};
 use embassy_rp::{Peri, Peripherals};
 use hub75::LedPeripherals;
 
@@ -11,6 +11,8 @@ pub struct BoardPeripherals {
     pub trng: TrngPeripherals,
     pub net: NetPeripherals,
     pub led: LedPeripherals,
+    pub watchdog: Peri<'static, WATCHDOG>,
+    pub flash: Peri<'static, FLASH>,
     pub core1: Peri<'static, CORE1>,
 }
 
@@ -51,6 +53,8 @@ pub fn split(peripherals: Peripherals) -> BoardPeripherals {
         trng,
         net,
         led,
+        watchdog: peripherals.WATCHDOG,
+        flash: peripherals.FLASH,
         core1: peripherals.CORE1,
     }
 }

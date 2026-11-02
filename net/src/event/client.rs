@@ -28,6 +28,7 @@ pub enum ClientEvent {
 
     DeviceDisconnect = 0x40,
     DeviceAssignGame = 0x41,
+    DeviceConfigSet = 0x42,
 }
 
 impl TryFrom<u8> for ClientEvent {
@@ -56,6 +57,7 @@ impl TryFrom<u8> for ClientEvent {
 
             0x40 => Ok(Self::DeviceDisconnect),
             0x41 => Ok(Self::DeviceAssignGame),
+            0x42 => Ok(Self::DeviceConfigSet),
 
             _ => Err(""),
         }

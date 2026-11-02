@@ -48,12 +48,13 @@ impl Net {
         InitializedNetStack { stack, runner }
     }
 
-    /// Joins the configured Wi-Fi network, retrying until association succeeds.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `config` contains invalid or empty Wi-Fi credentials.
-    pub async fn init_wifi(control: &mut Control<'static>, config: &impl NetworkConfig) {
+    /// Joins the configured Wi-Fi network, attempting up to `max_retries` times.
+    /// Returns `true` if connected successfully, `false` otherwise.
+    pub async fn try_join_wifi(
+        control: &mut Control<'static>,
+        config: &impl NetworkConfig,
+        max_retries: usize,
+    ) -> bool {
         let ssid = config.wifi_ssid();
         let password = config.wifi_password();
 
@@ -63,18 +64,20 @@ impl Net {
             {
                 (ssid_str, password_str.as_bytes())
             }
-            _ => {
-                panic!("Invalid or empty Wi-Fi credentials.");
-            }
+            _ => return false,
         };
 
-        while control
-            .join(ssid, JoinOptions::new(password_bytes))
-            .await
-            .is_err()
-        {
+        for attempt in 1..=max_retries {
+            defmt::info!("Connecting to Wi-Fi '{}' (attempt {}/{})", ssid, attempt, max_retries);
+            if control.join(ssid, JoinOptions::new(password_bytes)).await.is_ok() {
+                defmt::info!("Wi-Fi association successful!");
+                return true;
+            }
             Timer::after_secs(1).await;
         }
+
+        defmt::warn!("Failed to associate with Wi-Fi after {} attempts", max_retries);
+        false
     }
 
     #[inline(always)]

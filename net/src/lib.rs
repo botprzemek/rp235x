@@ -9,7 +9,7 @@ pub mod node;
 pub mod packet;
 pub mod transport;
 
-pub use data::{Device, DeviceType, Handshake};
+pub use data::{Device, DeviceConfigPacket, DeviceConfigPayload, DeviceType, Handshake};
 pub use event::{ClientEvent, ServerEvent};
 pub use node::{
     Client, ClientHandler, NetError, Node, PacketHandler, ReceivedPacket, Server, ServerHandler,

@@ -14,6 +14,8 @@ pub enum ServerEvent {
 
     DeviceUpdate = 0xd0,
     DeviceDisconnect = 0xd1,
+    DeviceConfigAck = 0xd2,
+    DeviceConfigSuccess = 0xd3,
 }
 
 impl TryFrom<u8> for ServerEvent {
@@ -28,6 +30,8 @@ impl TryFrom<u8> for ServerEvent {
 
             0xd0 => Ok(Self::DeviceUpdate),
             0xd1 => Ok(Self::DeviceDisconnect),
+            0xd2 => Ok(Self::DeviceConfigAck),
+            0xd3 => Ok(Self::DeviceConfigSuccess),
             _ => Err(""),
         }
     }

@@ -295,7 +295,7 @@ pub fn app() -> Html {
             let client_device = load_or_create_browser_device();
             device.set(client_device);
 
-            let websocket_url = "ws://127.0.0.1:3000/ws".to_string();
+            let websocket_url = "ws://192.168.0.106:3000/ws".to_string();
 
             if let Ok(websocket) = WebSocket::new(&websocket_url) {
                 websocket.set_binary_type(BinaryType::Arraybuffer);

@@ -27,3 +27,6 @@ pub use file::{BinReader, BinWriter};
 #[cfg(feature = "std")]
 pub use keys::{KeyError, KeyPair, Keys, SecureKey};
 pub use print::Print;
+
+#[cfg(feature = "std")]
+pub use probe_rs;

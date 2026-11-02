@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@theme {
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", "Helvetica Neue", sans-serif;
+
+    --color-scoreboard-bg: #FF6435;
+    --color-scoreboard-alt: #232327;
+    --color-scoreboard-accent: #FFFFFF;
+
+    --text-sm: 0.6rem;
+    --text-xs: 0.76rem;
+    --text-base: 1rem;
+    --text-lg: 1.25rem;
+    --text-xl: 1.56rem;
+    --text-2xl: 1.95rem;
+    --text-3xl: 2.44rem;
+    --text-4xl: 3.05rem;
+    --text-5xl: 3.81rem;
+    --text-6xl: 4.77rem;
+    --text-7xl: 5.96rem;
+}
+
+@layer base {  
+    html,
+    body {
+        @apply bg-transparent overflow-hidden outline-none font-sans antialiased m-0 p-0 select-none;
+        background-color: transparent !important;
+        -webkit-tap-highlight-color: transparent;
+    }
+    *:focus,
+    *:focus-visible {
+        @apply outline-none;
+    }
+}

@@ -11,14 +11,21 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
-        "title": "Scoreboard",
-        "width": 1280,
-        "height": 800,
-        "decorations": true,
-        "transparent": true
+        "title": "Lapapi",
+        "width": 1060,
+        "height": 680,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "windowEffects": {
+          "effects": ["hudWindow"],
+          "state": "active",
+          "radius": 12.0
+        }
       }
     ],
     "security": {

@@ -36,5 +36,10 @@ fn main() -> ! {
         Core1::entry(led_peripherals)
     });
 
-    Core0::entry(board_peripherals.net, board_peripherals.trng)
+    Core0::entry(
+        board_peripherals.net,
+        board_peripherals.trng,
+        board_peripherals.watchdog,
+        board_peripherals.flash,
+    )
 }

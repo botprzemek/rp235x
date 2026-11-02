@@ -1,6 +1,8 @@
 //! Flash memory reader and writer for [`Config`].
 
 #[cfg(feature = "std")]
+use std::eprintln;
+#[cfg(feature = "std")]
 use std::time::Duration;
 
 #[cfg(feature = "std")]
@@ -39,7 +41,16 @@ impl<'flash> FlashReader<'flash> for Config {
         let lister = Lister::new();
         let probes = lister.list_all();
 
-        let probe = probes[0].open().expect("failed to open debug probe");
+        if probes.is_empty() {
+            return Err(ConfigError::FileNotFound);
+        }
+
+        let mut probe = lister.open(&probes[0]).map_err(|error| {
+            eprintln!("failed to open debug probe: {error:?}");
+            ConfigError::FileNotFound
+        })?;
+
+        let _ = probe.set_speed(5000);
 
         let mut session = probe
             .attach("RP2350", Permissions::default())
@@ -72,7 +83,15 @@ impl FlashWriter for Config {
     fn write(self) {
         let lister = Lister::new();
         let probes = lister.list_all();
-        let probe = probes[0].open().expect("failed to open debug probe");
+
+        assert!(!probes.is_empty(), "no debug probes found");
+
+        let mut probe = lister
+            .open(&probes[0])
+            .expect("failed to open debug probe");
+
+        let _ = probe.set_speed(5000);
+
         let mut session = probe
             .attach("RP2350", Permissions::default())
             .expect("failed to attach to RP2350 target");

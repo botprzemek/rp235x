@@ -1,5 +1,6 @@
 //! Peripheral partitioning for the RP235x worker firmware.
 
+pub mod flash;
 mod net;
 mod split;
 mod trng;

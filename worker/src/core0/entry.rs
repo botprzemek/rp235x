@@ -1,6 +1,8 @@
 //! Core 0 executor and state machine entry task.
 
 use embassy_executor::{Executor, Spawner};
+use embassy_rp::Peri;
+use embassy_rp::peripherals::{FLASH, WATCHDOG};
 use static_cell::StaticCell;
 
 use crate::peripherals::{NetPeripherals, TrngPeripherals};
@@ -14,20 +16,33 @@ pub static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 impl Core0 {
     /// Initializes the Core 0 executor and spawns the main state machine task.
-    pub fn entry(net: NetPeripherals, trng: TrngPeripherals) -> ! {
+    pub fn entry(
+        net: NetPeripherals,
+        trng: TrngPeripherals,
+        watchdog: Peri<'static, WATCHDOG>,
+        flash: Peri<'static, FLASH>,
+    ) -> ! {
         let executor = Executor::new();
 
         EXECUTOR.init(executor).run(|spawner| {
-            spawner.spawn(defmt::unwrap!(task(spawner, net, trng)));
+            spawner.spawn(defmt::unwrap!(task(spawner, net, trng, watchdog, flash)));
         })
     }
 }
 
 #[embassy_executor::task]
-async fn task(spawner: Spawner, net: NetPeripherals, trng: TrngPeripherals) {
+async fn task(
+    spawner: Spawner,
+    net: NetPeripherals,
+    trng: TrngPeripherals,
+    watchdog: Peri<'static, WATCHDOG>,
+    flash: Peri<'static, FLASH>,
+) {
     let mut state_machine = Machine::new();
 
     state_machine.handle_boot().await;
     state_machine.handle_sync().await;
-    state_machine.handle_networking(spawner, net, trng).await;
+    state_machine
+        .handle_networking(spawner, net, trng, watchdog, flash)
+        .await;
 }

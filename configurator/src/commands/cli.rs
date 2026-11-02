@@ -4,8 +4,8 @@ use clap::Subcommand;
 use config::ConfigError;
 
 use crate::commands::{
-    CreateArgs, CreateCommand, PeekArgs, PeekCommand, VerifyArgs, VerifyCommand, ViewArgs,
-    ViewCommand, WriteArgs, WriteCommand,
+    CreateArgs, CreateCommand, FlashArgs, FlashCommand, PeekArgs, PeekCommand, VerifyArgs,
+    VerifyCommand, ViewArgs, ViewCommand, WriteArgs, WriteCommand,
 };
 
 /// Supported CLI subcommands.
@@ -16,6 +16,7 @@ pub enum Commands {
     Peek(PeekArgs),
     View(ViewArgs),
     Write(WriteArgs),
+    Flash(FlashArgs),
 }
 
 impl Commands {
@@ -29,6 +30,7 @@ impl Commands {
             Peek(args) => PeekCommand::handle(&args),
             View(args) => ViewCommand::handle(&args),
             Write(args) => WriteCommand::handle(&args),
+            Flash(args) => FlashCommand::handle(&args),
         }
     }
 }
