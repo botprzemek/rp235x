@@ -15,6 +15,44 @@ pub fn invoke_tauri_window_command(cmd: &'static str) {
     }
 }
 
+/// Invokes Tauri `discover_master` to search for Master server via UDP broadcast.
+pub async fn invoke_discover_master(timeout_secs: Option<u64>) -> Result<String, String> {
+    if let Some(window) = web_sys::window()
+        && let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
+        && let Ok(core_obj) = js_sys::Reflect::get(&tauri_obj, &JsValue::from_str("core"))
+        && let Ok(invoke_fn) = js_sys::Reflect::get(&core_obj, &JsValue::from_str("invoke"))
+        && let Ok(func) = invoke_fn.dyn_into::<js_sys::Function>()
+    {
+        let args = js_sys::Object::new();
+        if let Some(ts) = timeout_secs {
+            let _ = js_sys::Reflect::set(
+                &args,
+                &JsValue::from_str("timeoutSecs"),
+                &JsValue::from_f64(ts as f64),
+            );
+        }
+
+        let promise = match func.call2(&core_obj, &JsValue::from_str("discover_master"), &args) {
+            Ok(val) => val.dyn_into::<js_sys::Promise>().ok(),
+            Err(e) => return Err(format!("Invoke failed: {:?}", e)),
+        };
+
+        if let Some(p) = promise {
+            let fut = wasm_bindgen_futures::JsFuture::from(p);
+            match fut.await {
+                Ok(res) => Ok(res.as_string().unwrap_or_else(|| "127.0.0.1:3000".to_string())),
+                Err(err) => Err(err
+                    .as_string()
+                    .unwrap_or_else(|| "Nie znaleziono Mastera w sieci".to_string())),
+            }
+        } else {
+            Err("Failed to acquire Promise".to_string())
+        }
+    } else {
+        // Fallback for pure browser mode without Tauri IPC
+        Err("Tryb przeglądarki bez IPC Tauri".to_string())
+    }
+}
 /// Invokes Tauri `send_device_config` to transmit UDP OTA Wi-Fi configuration.
 pub async fn invoke_send_device_config(
     target_ip: String,

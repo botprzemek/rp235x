@@ -78,20 +78,26 @@ impl Machine {
                     Timer::after_millis(500).await;
                 }
 
-                if dhcp_ok {
-                    if let Some(config_v4) = initialized_net.stack.config_v4() {
-                        defmt::info!(
-                            "NetworkConfig::Address               {}",
-                            &config_v4.address
-                        );
-                        if let Some(ref gateway) = config_v4.gateway {
-                            defmt::info!("NetworkConfig::Gateway               {}", gateway);
-                        }
-
-                        self.transition(Input::WifiConnected);
-                        connected_sta = true;
-                    }
+                if !dhcp_ok {
+                    return;
                 }
+
+                let config_v4 = match initialized_net.stack.config_v4() {
+                    Some(config_v4) => config_v4,
+                    None => return,
+                };
+
+                defmt::info!(
+                    "NetworkConfig::Address               {}",
+                    &config_v4.address
+                );
+
+                if let Some(ref gateway) = config_v4.gateway {
+                    defmt::info!("NetworkConfig::Gateway               {}", gateway);
+                }
+
+                self.transition(Input::WifiConnected);
+                connected_sta = true;
             }
         }
 
@@ -109,17 +115,16 @@ impl Machine {
             // Configure Static IP 192.168.4.1/24 for AP mode
             let ap_ip = Ipv4Address::new(192, 168, 4, 1);
             let subnet = Ipv4Cidr::new(ap_ip, 24);
-            initialized_net.stack.set_config_v4(embassy_net::ConfigV4::Static(StaticConfigV4 {
-                address: subnet,
-                gateway: Some(ap_ip),
-                dns_servers: heapless::Vec::new(),
-            }));
+            initialized_net
+                .stack
+                .set_config_v4(embassy_net::ConfigV4::Static(StaticConfigV4 {
+                    address: subnet,
+                    gateway: Some(ap_ip),
+                    dns_servers: heapless::Vec::new(),
+                }));
 
             // Start CYW43 in AP mode (Open network 'Worker-Setup' on channel 1)
-            cyw43_driver
-                .control
-                .start_ap_open("Worker-Setup", 1)
-                .await;
+            cyw43_driver.control.start_ap_open("Worker-Setup", 1).await;
             defmt::info!("AP 'Worker-Setup' started! Listening on UDP port 8001...");
 
             // Spawn DHCP server in background

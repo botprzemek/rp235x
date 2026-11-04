@@ -22,9 +22,12 @@ use web_sys::{BinaryType, MessageEvent, WebSocket};
 
 use crate::adapters::tauri::{invoke_send_device_config, invoke_tauri_window_command};
 use crate::adapters::ws::{
-    load_or_create_browser_device, BrowserWebSocketAdapter, LapapiClientHandler,
+    load_master_address, load_or_create_browser_device, save_master_address,
+    BrowserWebSocketAdapter, LapapiClientHandler,
 };
-use crate::ui::lapapi::{LapapiCenterView, LapapiInspector, LapapiSidebar, WifiConfigModal};
+use crate::ui::lapapi::{
+    LapapiCenterView, LapapiInspector, LapapiSidebar, MasterServerModal, WifiConfigModal,
+};
 
 /// Root Lapapi macOS component written in clean Leptos architecture.
 #[component]
@@ -32,6 +35,10 @@ pub fn App() -> impl IntoView {
     let is_focused = RwSignal::new(true);
     let is_lights_hovered = RwSignal::new(false);
     let zoom_level = RwSignal::new(1.0f64);
+
+    // Master server address & modal state
+    let master_address = RwSignal::new(load_master_address());
+    let is_master_modal_open = RwSignal::new(false);
 
     // WebSocket state
     let is_connected = RwSignal::new(false);
@@ -99,50 +106,50 @@ pub fn App() -> impl IntoView {
                 })
             };
 
+            let _ = window.add_event_listener_with_callback("focus", on_focus.as_ref().unchecked_ref());
+            let _ = window.add_event_listener_with_callback("blur", on_blur.as_ref().unchecked_ref());
+            on_focus.forget();
+            on_blur.forget();
+
             let on_keydown = {
                 let on_zoom_in = on_zoom_in;
                 let on_zoom_out = on_zoom_out;
                 let on_zoom_reset = on_zoom_reset;
+
                 Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |e: web_sys::KeyboardEvent| {
-                    let is_mod = e.meta_key() || e.ctrl_key();
-                    if is_mod {
-                        let key = e.key();
-                        if key == "=" || key == "+" {
-                            e.prevent_default();
-                            on_zoom_in.run(());
-                        } else if key == "-" || key == "_" {
-                            e.prevent_default();
-                            on_zoom_out.run(());
-                        } else if key == "0" {
-                            e.prevent_default();
-                            on_zoom_reset.run(());
+                    if e.meta_key() || e.ctrl_key() {
+                        match e.key().as_str() {
+                            "=" | "+" => {
+                                e.prevent_default();
+                                on_zoom_in.run(());
+                            }
+                            "-" => {
+                                e.prevent_default();
+                                on_zoom_out.run(());
+                            }
+                            "0" => {
+                                e.prevent_default();
+                                on_zoom_reset.run(());
+                            }
+                            _ => {}
                         }
                     }
                 })
             };
-
-            let _ = window
-                .add_event_listener_with_callback("focus", on_focus.as_ref().unchecked_ref());
-            let _ = window
-                .add_event_listener_with_callback("blur", on_blur.as_ref().unchecked_ref());
-            let _ = window
-                .add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref());
-
-            on_focus.forget();
-            on_blur.forget();
+            let _ = window.add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref());
             on_keydown.forget();
 
-            // Native macOS Menu Bar events emitted by Tauri
+            // Native Tauri Event Listeners (macOS System Menu)
             if let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
                 && let Ok(event_obj) = js_sys::Reflect::get(&tauri_obj, &JsValue::from_str("event"))
                 && let Ok(listen_fn) = js_sys::Reflect::get(&event_obj, &JsValue::from_str("listen"))
                 && let Ok(func) = listen_fn.dyn_into::<js_sys::Function>()
             {
-                // Window Focus
+                // Focus changes
                 let on_tauri_focus = {
                     let is_focused = is_focused;
-                    Closure::<dyn FnMut(JsValue)>::new(move |evt: JsValue| {
-                        if let Ok(payload) = js_sys::Reflect::get(&evt, &JsValue::from_str("payload"))
+                    Closure::<dyn FnMut(JsValue)>::new(move |val: JsValue| {
+                        if let Ok(payload) = js_sys::Reflect::get(&val, &JsValue::from_str("payload"))
                             && let Some(focused) = payload.as_bool()
                         {
                             is_focused.set(focused);
@@ -189,12 +196,30 @@ pub fn App() -> impl IntoView {
         }
     });
 
-    // WebSocket connection lifecycle
+    // Reactive WebSocket connection lifecycle (reconnects whenever master_address changes)
     Effect::new(move |_| {
         let client_device = load_or_create_browser_device();
         my_device.set(client_device);
 
-        let websocket_url = "ws://192.168.0.106:3000/ws".to_string();
+        let target_addr = master_address.get();
+        let target_addr = target_addr.trim();
+
+        // Support formats like "127.0.0.1:3000", "ws://127.0.0.1:3000", "http://127.0.0.1:3000"
+        let websocket_url = if target_addr.starts_with("ws://") || target_addr.starts_with("wss://") {
+            if target_addr.ends_with("/ws") {
+                target_addr.to_string()
+            } else {
+                format!("{}/ws", target_addr.trim_end_matches('/'))
+            }
+        } else if let Some(stripped) = target_addr.strip_prefix("http://") {
+            format!("ws://{}/ws", stripped.trim_end_matches('/'))
+        } else if let Some(stripped) = target_addr.strip_prefix("https://") {
+            format!("wss://{}/ws", stripped.trim_end_matches('/'))
+        } else {
+            format!("ws://{}/ws", target_addr.trim_end_matches('/'))
+        };
+
+        add_log(format!("[WS] Łączenie z Masterem: {}", websocket_url));
 
         if let Ok(websocket) = WebSocket::new(&websocket_url) {
             websocket.set_binary_type(BinaryType::Arraybuffer);
@@ -210,7 +235,7 @@ pub fn App() -> impl IntoView {
                 let command_tx_open = command_tx.clone();
                 let onopen = Closure::wrap(Box::new(move |_event: JsValue| {
                     connected_clone.set(true);
-                    add_log("Połączono z serwerem WebSocket.".to_string());
+                    add_log("Połączono z serwerem Master.".to_string());
 
                     let handshake =
                         ClientPacket::new(ClientEvent::HandshakeRequest, 0, client_device.to_bytes());
@@ -248,7 +273,7 @@ pub fn App() -> impl IntoView {
                     devices_clone.set(Vec::new());
                     games_clone.set(Vec::new());
                     incoming_tx_close.close_channel();
-                    add_log("Połączenie WebSocket zamknięte.".to_string());
+                    add_log("Rozłączono z serwerem Master.".to_string());
                 }) as Box<dyn FnMut(JsValue)>);
                 websocket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
                 onclose.forget();
@@ -405,6 +430,8 @@ pub fn App() -> impl IntoView {
             }
 
             command_sender.set(Some(command_tx));
+        } else {
+            add_log(format!("[WS] Nieprawidłowy adres WebSocket: {}", websocket_url));
         }
     });
 
@@ -444,7 +471,16 @@ pub fn App() -> impl IntoView {
     let on_create_game = {
         let send = send_client_packet.clone();
         Callback::new(move |()| {
-            send(ClientEvent::GameCreate, current_game.get().to_bytes());
+            let next_id = available_games
+                .get()
+                .iter()
+                .map(Game::id)
+                .max()
+                .unwrap_or(0)
+                + 1;
+            let new_game = Game::new_with_id(next_id, Discipline::Fiba5vs5);
+            current_game.set(new_game);
+            send(ClientEvent::GameCreate, new_game.to_bytes());
         })
     };
 
@@ -464,7 +500,13 @@ pub fn App() -> impl IntoView {
     };
 
     let on_select_device = Callback::new(move |sn: String| {
-        selected_device_sn.set(Some(sn));
+        selected_device_sn.update(|current| {
+            if current.as_ref() == Some(&sn) {
+                *current = None;
+            } else {
+                *current = Some(sn);
+            }
+        });
     });
 
     // Window drag and controls
@@ -491,6 +533,21 @@ pub fn App() -> impl IntoView {
     let on_maximize = Callback::new(|event: web_sys::MouseEvent| {
         event.stop_propagation();
         invoke_tauri_window_command("window_toggle_maximize");
+    });
+
+    // Master server modal callbacks
+    let on_open_master_modal = Callback::new(move |()| {
+        is_master_modal_open.set(true);
+    });
+
+    let on_close_master_modal = Callback::new(move |_: web_sys::MouseEvent| {
+        is_master_modal_open.set(false);
+    });
+
+    let on_save_master_address = Callback::new(move |new_address: String| {
+        save_master_address(&new_address);
+        master_address.set(new_address);
+        is_master_modal_open.set(false);
     });
 
     // Wi-Fi dialog callbacks
@@ -604,6 +661,8 @@ pub fn App() -> impl IntoView {
                 selected_device_sn=selected_device_sn.into()
                 on_select_device=on_select_device
                 is_connected=is_connected.into()
+                master_address=master_address.into()
+                on_open_master_modal=on_open_master_modal
                 sidebar_bg_class=sidebar_bg_class
                 on_open_wifi_setup=on_open_wifi_setup
             />
@@ -630,6 +689,14 @@ pub fn App() -> impl IntoView {
                 inspector_bg_class=inspector_bg_class
                 on_disconnect_device=on_disconnect_device
                 on_open_wifi_config=on_open_wifi_for_device
+            />
+
+            // Master Server Address Config Modal
+            <MasterServerModal
+                is_open=is_master_modal_open.into()
+                current_address=master_address.into()
+                on_close=on_close_master_modal
+                on_save=on_save_master_address
             />
 
             // Wi-Fi Config Modal (OTA UDP)

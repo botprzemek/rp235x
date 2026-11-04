@@ -7,6 +7,30 @@ use net::layout::PACKET_SIZE;
 use net::{ClientHandler, ClientPacket, Device, DeviceType, RawConnection, ServerPacket};
 
 const SERIAL_NUMBER_STORAGE_KEY: &str = "lapapi_serial_number";
+const MASTER_ADDRESS_STORAGE_KEY: &str = "lapapi_master_address";
+
+/// Default Master address if none stored in LocalStorage.
+pub const DEFAULT_MASTER_ADDRESS: &str = "127.0.0.1:3000";
+
+/// Loads the configured Master address from LocalStorage or returns default.
+pub fn load_master_address() -> String {
+    let storage = web_sys::window().and_then(|window| window.local_storage().ok().flatten());
+    if let Some(store) = storage
+        && let Ok(Some(addr)) = store.get_item(MASTER_ADDRESS_STORAGE_KEY)
+        && !addr.trim().is_empty()
+    {
+        return addr.trim().to_string();
+    }
+    DEFAULT_MASTER_ADDRESS.to_string()
+}
+
+/// Saves the Master address into LocalStorage.
+pub fn save_master_address(address: &str) {
+    let storage = web_sys::window().and_then(|window| window.local_storage().ok().flatten());
+    if let Some(store) = storage {
+        let _ = store.set_item(MASTER_ADDRESS_STORAGE_KEY, address.trim());
+    }
+}
 
 /// Loads an existing device identifier from LocalStorage or generates and persists a new one.
 pub fn load_or_create_browser_device() -> Device {
@@ -87,4 +111,3 @@ impl ClientHandler for LapapiClientHandler {
         None
     }
 }
-

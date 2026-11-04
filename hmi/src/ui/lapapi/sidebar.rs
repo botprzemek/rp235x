@@ -24,6 +24,8 @@ pub fn LapapiSidebar(
     selected_device_sn: Signal<Option<String>>,
     on_select_device: Callback<String>,
     is_connected: Signal<bool>,
+    master_address: Signal<String>,
+    on_open_master_modal: Callback<()>,
     sidebar_bg_class: Signal<&'static str>,
     on_open_wifi_setup: Callback<()>,
 ) -> impl IntoView {
@@ -45,18 +47,23 @@ pub fn LapapiSidebar(
         on_create_game.run(());
     };
 
+    let on_master_click = move |e: web_sys::MouseEvent| {
+        e.stop_propagation();
+        on_open_master_modal.run(());
+    };
+
     view! {
         <aside class=move || format!("w-[240px] shrink-0 flex flex-col justify-between border-r border-white/[0.08] {} transition-colors duration-200 select-none overflow-hidden", sidebar_bg_class.get())>
             <div class="flex-1 flex flex-col min-h-0">
-                // Titlebar Header Region with Traffic Lights
+                // Traffic Lights Region
                 <div
                     on:mousedown=move |e| on_start_drag.run(e)
-                    class="h-10 px-3.5 flex items-center justify-between shrink-0"
+                    on:mouseenter=move |_| is_lights_hovered.set(true)
+                    on:mouseleave=move |_| is_lights_hovered.set(false)
+                    class="h-9 w-full flex items-center justify-between px-3.5 shrink-0 cursor-grab active:cursor-grabbing border-b border-white/[0.04]"
                 >
                     <div
                         on:mousedown=move |e| stop_propagation.run(e)
-                        on:mouseenter=move |_| is_lights_hovered.set(true)
-                        on:mouseleave=move |_| is_lights_hovered.set(false)
                         class="flex items-center gap-2"
                     >
                         <CloseButton
@@ -76,7 +83,7 @@ pub fn LapapiSidebar(
                         />
                     </div>
 
-                    // Quick create text button
+                    // Quick create game button
                     <button
                         on:mousedown=move |e| stop_propagation.run(e)
                         on:click=on_new_game_click
@@ -84,20 +91,43 @@ pub fn LapapiSidebar(
                         title="Utwórz nową grę"
                         class="text-[11px] px-2 py-0.5 rounded-[5px] bg-white/[0.08] hover:bg-white/[0.14] text-white/90 font-medium cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-white/[0.06]"
                     >
-                        {"Nowa gra"}
+                        {"+ Gra"}
                     </button>
                 </div>
 
-                // Sidebar Section Header
-                <div class="px-3.5 pt-1 pb-1.5 flex items-center justify-between">
-                    <span class="text-[11px] font-medium text-white/45">
-                        {"Lapapi Control"}
-                    </span>
+                // Master Server Address Bar & Setup Button
+                <div class="px-2.5 py-1.5 border-b border-white/[0.06] bg-black/15 flex items-center justify-between text-[11px]">
+                    <div
+                        on:click=on_master_click
+                        class="flex items-center gap-1.5 truncate flex-1 cursor-pointer hover:text-white text-white/70 transition-colors mr-1"
+                        title="Kliknij, aby zmienić adres serwera Master"
+                    >
+                        <span class=move || format!(
+                            "w-1.5 h-1.5 rounded-full shrink-0 {}",
+                            if is_connected.get() { "bg-emerald-400" } else { "bg-rose-400 animate-pulse" }
+                        ) />
+                        <span class="truncate font-mono text-[10px]">
+                            {move || master_address.get()}
+                        </span>
+                    </div>
+
+                    <button
+                        on:click=on_master_click
+                        class="px-1.5 py-0.5 rounded-[4px] bg-white/[0.08] hover:bg-white/[0.16] text-white/80 text-[10px] cursor-pointer transition-colors font-medium shrink-0"
+                        title="Zmień adres serwera Master"
+                    >
+                        {"Zmień"}
+                    </button>
+                </div>
+
+                // Sidebar Header Title & Status
+                <div class="px-3 pt-2.5 pb-1 flex items-center justify-between text-white/50 text-[11px] font-medium tracking-wide uppercase">
+                    <span>{"Serwer Master"}</span>
                     <span class=move || format!(
-                        "text-[10px] px-1.5 py-0.5 rounded-[4px] font-medium {}",
-                        if is_connected.get() { "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20" } else { "bg-rose-500/15 text-rose-300 border border-rose-500/20" }
+                        "text-[10px] px-1.5 py-0.5 rounded-[4px] font-semibold {}",
+                        if is_connected.get() { "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" } else { "bg-rose-500/20 text-rose-300 border border-rose-500/30" }
                     )>
-                        {move || if is_connected.get() { "Live" } else { "Offline" }}
+                        {move || if is_connected.get() { "Połączony" } else { "Rozłączony" }}
                     </span>
                 </div>
 
@@ -136,7 +166,7 @@ pub fn LapapiSidebar(
                                                     class=move || format!(
                                                         "group flex items-center justify-between px-2 py-1 rounded-[5px] text-[12px] cursor-pointer transition-colors {}",
                                                         if is_sel.get() {
-                                                            "bg-white/[0.14] text-white font-medium border border-white/[0.08]"
+                                                             "bg-white/[0.14] text-white font-medium border border-white/[0.08]"
                                                         } else {
                                                             "text-white/75 hover:bg-white/[0.06] hover:text-white"
                                                         }
@@ -162,21 +192,9 @@ pub fn LapapiSidebar(
                             class="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-white/50 hover:text-white/80 cursor-pointer rounded-[5px] hover:bg-white/[0.04] transition-colors"
                         >
                             <span>{"Urządzenia"}</span>
-                            <div class="flex items-center gap-1.5">
-                                <button
-                                    on:click=move |e| {
-                                        e.stop_propagation();
-                                        on_open_wifi_setup.run(());
-                                    }
-                                    title="Konfiguracja sieci Wi-Fi przez UDP"
-                                    class="text-[10px] px-1.5 py-0.5 rounded-[4px] bg-blue-600/25 hover:bg-blue-600/40 text-blue-300 font-medium cursor-pointer transition-colors border border-blue-400/20"
-                                >
-                                    {"Wi-Fi"}
-                                </button>
-                                <span class="text-[10px] px-1.5 py-0.2 rounded-[4px] bg-white/[0.06] text-white/50 tabular-nums">
-                                    {move || devices.get().len()}
-                                </span>
-                            </div>
+                            <span class="text-[10px] px-1.5 py-0.2 rounded-[4px] bg-white/[0.06] text-white/50 tabular-nums">
+                                {move || devices.get().len()}
+                            </span>
                         </div>
 
                         <Show when=move || devices_expanded.get()>
@@ -224,17 +242,14 @@ pub fn LapapiSidebar(
                 </div>
             </div>
 
-            // Bottom Profile / Connection Indicator
-            <div class="p-2.5 border-t border-white/[0.06] flex items-center justify-between text-white/50">
-                <span class="text-[11px] text-white/70">
-                    {move || if is_connected.get() { "Połączono" } else { "Rozłączono" }}
-                </span>
+            // Bottom Profile / Wi-Fi OTA button
+            <div class="p-2.5 border-t border-white/[0.06] flex items-center justify-between text-white/50 gap-2">
                 <button
-                    on:click=on_new_game_click
-                    disabled=move || !is_connected.get()
-                    class="px-2 py-0.5 bg-white/[0.06] hover:bg-white/[0.12] text-white/80 text-[11px] font-medium rounded-[5px] cursor-pointer transition-colors border border-white/[0.06] disabled:opacity-40"
+                    on:click=move |_| on_open_wifi_setup.run(())
+                    class="w-full px-2 py-1 bg-white/[0.06] hover:bg-white/[0.12] text-white/75 text-[11px] font-medium rounded-[5px] cursor-pointer transition-colors border border-white/[0.06] text-center"
+                    title="Konfiguruj Wi-Fi urządzeń przez UDP"
                 >
-                    {"+ Gra"}
+                    {"Wi-Fi Setup (OTA)"}
                 </button>
             </div>
         </aside>

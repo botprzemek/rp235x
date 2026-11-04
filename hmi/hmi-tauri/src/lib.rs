@@ -1,10 +1,10 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::net::UdpSocket;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use net::event::ServerEvent;
+use net::event::{ClientEvent, ServerEvent};
 use net::layout::PACKET_SIZE;
-use net::{DeviceConfigPacket, ServerPacket};
+use net::{ClientPacket, Device, DeviceConfigPacket, DeviceType, ServerPacket};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
 use tauri::{AppHandle, Emitter, Manager, PhysicalSize, WebviewWindow, WindowEvent};
@@ -95,6 +95,53 @@ fn set_island_mode(app: AppHandle, island: bool) {
 }
 
 #[tauri::command]
+async fn discover_master(timeout_secs: Option<u64>) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| format!("Błąd bind socketu: {}", e))?;
+        let _ = socket.set_broadcast(true);
+        let _ = socket.set_read_timeout(Some(Duration::from_millis(400)));
+
+        let device = Device::try_new(DeviceType::WebBrowser, "sn-lap-disc", "lapapi-hmi")
+            .map_err(|e| format!("Błąd inicjalizacji urządzenia: {:?}", e))?;
+        let packet = ClientPacket::new(ClientEvent::HandshakeRequest, 0, device.to_bytes());
+        let packet_bytes = packet.to_bytes();
+
+        let timeout = Duration::from_secs(timeout_secs.unwrap_or(4));
+        let start = Instant::now();
+        let mut buf = [0u8; PACKET_SIZE];
+
+        let targets = ["255.255.255.255:9000", "127.0.0.1:9000"];
+
+        while start.elapsed() < timeout {
+            for target in &targets {
+                let _ = socket.send_to(&packet_bytes, target);
+            }
+
+            let step_start = Instant::now();
+            while step_start.elapsed() < Duration::from_millis(400) {
+                match socket.recv_from(&mut buf) {
+                    Ok((size, remote_addr)) => {
+                        if size == PACKET_SIZE {
+                            if let Ok(server_packet) = ServerPacket::from_bytes(buf) {
+                                if server_packet.event() == ServerEvent::HandshakeAck {
+                                    let ip = remote_addr.ip().to_string();
+                                    return Ok(format!("{}:3000", ip));
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+
+        Err("Nie wykryto serwera Master w sieci lokalnej.".to_string())
+    })
+    .await
+    .map_err(|e| format!("Błąd zadania: {}", e))?
+}
+
+#[tauri::command]
 fn send_device_config(
     target_ip: String,
     serial_number: String,
@@ -166,10 +213,10 @@ pub fn run() {
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 apply_macos_vibrancy(&window);
-                if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/128x128@2x.png")) {
-                    let _ = window.set_icon(icon);
-                } else if let Some(icon) = app.default_window_icon() {
+                if let Some(icon) = app.default_window_icon() {
                     let _ = window.set_icon(icon.clone());
+                } else if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")) {
+                    let _ = window.set_icon(icon);
                 }
             }
 
@@ -259,7 +306,8 @@ pub fn run() {
             window_close,
             set_transparent_mode,
             set_island_mode,
-            send_device_config
+            send_device_config,
+            discover_master
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

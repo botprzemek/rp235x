@@ -54,9 +54,12 @@ pub fn WifiConfigModal(
                 >
                     // Modal Header
                     <div class="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
-                        <h3 class="text-[13px] font-medium text-white/95">
-                            {"Konfiguracja sieci Wi-Fi"}
-                        </h3>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-blue-400" />
+                            <h3 class="text-[13px] font-medium text-white/95">
+                                {"Konfiguracja Workera (OTA Config)"}
+                            </h3>
+                        </div>
                         <button
                             on:click=move |e| on_close.run(e)
                             class="px-2 py-0.5 rounded-[4px] text-[11px] text-white/50 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors"

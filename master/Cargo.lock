@@ -103,6 +103,7 @@ name = "basketball"
 version = "0.1.0"
 dependencies = [
  "net",
+ "serde",
 ]
 
 [[package]]

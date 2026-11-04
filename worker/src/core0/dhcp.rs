@@ -10,13 +10,7 @@ pub async fn run_dhcp_server(stack: Stack<'static>) -> ! {
     let mut tx_meta = [PacketMetadata::EMPTY; 4];
     let mut tx_buf = [0u8; 1024];
 
-    let mut socket = UdpSocket::new(
-        stack,
-        &mut rx_meta,
-        &mut rx_buf,
-        &mut tx_meta,
-        &mut tx_buf,
-    );
+    let mut socket = UdpSocket::new(stack, &mut rx_meta, &mut rx_buf, &mut tx_meta, &mut tx_buf);
 
     if let Err(e) = socket.bind(67) {
         defmt::error!("Failed to bind DHCP socket on port 67: {:?}", e);
@@ -55,7 +49,7 @@ pub async fn run_dhcp_server(stack: Stack<'static>) -> ! {
         let chaddr = &packet_buf[28..44]; // Client MAC address
 
         // Verify Magic Cookie: 0x63, 0x82, 0x53, 0x63
-        if &packet_buf[236..240] != [0x63, 0x82, 0x53, 0x63] {
+        if packet_buf[236..240] != [0x63, 0x82, 0x53, 0x63] {
             continue;
         }
 
@@ -91,7 +85,11 @@ pub async fn run_dhcp_server(stack: Stack<'static>) -> ! {
             _ => continue,
         };
 
-        defmt::info!("DHCP incoming type {}, replying with {}", msg_type, reply_type);
+        defmt::info!(
+            "DHCP incoming type {}, replying with {}",
+            msg_type,
+            reply_type
+        );
 
         // Build DHCP Response packet
         let mut resp = [0u8; 300];
@@ -119,7 +117,14 @@ pub async fn run_dhcp_server(stack: Stack<'static>) -> ! {
         opt_idx += 3;
 
         // Option 54: Server Identifier (192.168.4.1)
-        resp[opt_idx..opt_idx + 6].copy_from_slice(&[54, 4, server_ip[0], server_ip[1], server_ip[2], server_ip[3]]);
+        resp[opt_idx..opt_idx + 6].copy_from_slice(&[
+            54,
+            4,
+            server_ip[0],
+            server_ip[1],
+            server_ip[2],
+            server_ip[3],
+        ]);
         opt_idx += 6;
 
         // Option 51: Lease Time (1 day = 86400s)
@@ -127,15 +132,36 @@ pub async fn run_dhcp_server(stack: Stack<'static>) -> ! {
         opt_idx += 6;
 
         // Option 1: Subnet Mask (255.255.255.0)
-        resp[opt_idx..opt_idx + 6].copy_from_slice(&[1, 4, subnet_mask[0], subnet_mask[1], subnet_mask[2], subnet_mask[3]]);
+        resp[opt_idx..opt_idx + 6].copy_from_slice(&[
+            1,
+            4,
+            subnet_mask[0],
+            subnet_mask[1],
+            subnet_mask[2],
+            subnet_mask[3],
+        ]);
         opt_idx += 6;
 
         // Option 3: Router / Gateway (192.168.4.1)
-        resp[opt_idx..opt_idx + 6].copy_from_slice(&[3, 4, server_ip[0], server_ip[1], server_ip[2], server_ip[3]]);
+        resp[opt_idx..opt_idx + 6].copy_from_slice(&[
+            3,
+            4,
+            server_ip[0],
+            server_ip[1],
+            server_ip[2],
+            server_ip[3],
+        ]);
         opt_idx += 6;
 
         // Option 6: DNS Server (192.168.4.1)
-        resp[opt_idx..opt_idx + 6].copy_from_slice(&[6, 4, server_ip[0], server_ip[1], server_ip[2], server_ip[3]]);
+        resp[opt_idx..opt_idx + 6].copy_from_slice(&[
+            6,
+            4,
+            server_ip[0],
+            server_ip[1],
+            server_ip[2],
+            server_ip[3],
+        ]);
         opt_idx += 6;
 
         // Option 255: End

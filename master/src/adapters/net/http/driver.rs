@@ -6,7 +6,7 @@ use axum::Router;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
-use crate::adapters::net::http::{GameHandler, StaticHandler, WebsocketHandler};
+use crate::adapters::net::http::{GameHandler, WebsocketHandler};
 use crate::services::Services;
 
 /// Axum HTTP server driver.
@@ -31,7 +31,7 @@ impl WebDriver {
     /// Runs the Axum HTTP server until it terminates.
     pub async fn run(self, services: Arc<Services>) {
         let server = Router::new()
-            .merge(StaticHandler::create())
+            // .merge(StaticHandler::create())
             .merge(WebsocketHandler::create(Arc::clone(&services)))
             .nest("/api", GameHandler::create(services))
             .layer(CorsLayer::permissive());
