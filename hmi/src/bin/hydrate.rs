@@ -1,13 +1,12 @@
-//! Browser entry point for rendering or hydrating the Yew [`App`].
+//! Browser entry point for mounting the Leptos [`App`].
 
 use hmi::App;
-use yew::Renderer;
+use leptos::mount::mount_to_body;
+use web_sys::console;
 
 fn main() {
-    let app = Renderer::<App>::new();
-
-    #[cfg(feature = "csr")]
-    app.render();
-    #[cfg(feature = "ssr")]
-    app.hydrate();
+    console_error_panic_hook::set_once();
+    console::log_1(&"Initializing Lapapi WASM UI (Leptos)...".into());
+    mount_to_body(App);
+    console::log_1(&"Lapapi WASM UI mounted to body".into());
 }

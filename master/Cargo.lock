@@ -103,7 +103,6 @@ name = "basketball"
 version = "0.1.0"
 dependencies = [
  "net",
- "serde",
 ]
 
 [[package]]
@@ -776,32 +775,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e17592d60ebacc7d5e169f4663c5f84f9161cc90328abcfe8456f41e4dfcb284"
 
 [[package]]
-name = "hmi"
-version = "0.1.0"
-dependencies = [
- "axum",
- "basketball",
- "config",
- "futures",
- "gloo-net 0.7.0",
- "hub75",
- "mime_guess",
- "net",
- "reqwest",
- "rust-embed",
- "serde",
- "serde_json",
- "tokio",
- "tower-http 0.7.1",
- "tracing-subscriber",
- "tracing-web",
- "uuid",
- "wasm-bindgen-futures",
- "web-sys",
- "yew",
-]
-
-[[package]]
 name = "html-escape"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -868,10 +841,6 @@ name = "httpdate"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
-
-[[package]]
-name = "hub75"
-version = "0.1.0"
 
 [[package]]
 name = "hybrid-array"
@@ -1201,7 +1170,6 @@ dependencies = [
  "config",
  "futures",
  "gloo-net 0.7.0",
- "hmi",
  "mime_guess",
  "net",
  "redb",

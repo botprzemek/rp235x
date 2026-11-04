@@ -1,9 +1,10 @@
-//! Web HMI components for the basketball scoreboard, HUB75 LED matrix simulator, and WebSocket dashboard.
+//! Clean Leptos-based macOS HMI application for basketball scoreboard, HUB75 matrix simulator, and WebSocket dashboard.
 
-pub mod components;
-pub mod matrix;
-pub mod scoreboard;
-pub mod websocket_test;
+pub mod adapters;
+pub mod app;
+pub mod core;
+pub mod ui;
 
-pub use scoreboard::Scoreboard;
-pub use websocket_test::App;
+pub use app::App;
+pub use ui::matrix::MatrixSimulator;
+pub use ui::scoreboard::Scoreboard;

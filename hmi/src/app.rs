@@ -1,0 +1,648 @@
+//! Native macOS translucent UI for Lapapi with a functional WebSocket connection,
+//! native OS menu bar integration with Zoom (⌘+, ⌘-, ⌘0), and clean Leptos architecture.
+
+use core::pin::pin;
+use core::sync::atomic::{AtomicU8, Ordering};
+use std::sync::Arc;
+
+use basketball::{Discipline, Game};
+use config::DeviceConfig;
+use futures::channel::mpsc::{self, UnboundedSender};
+use futures::future::{self, Either};
+use futures::StreamExt;
+use leptos::prelude::*;
+use net::layout::PACKET_SIZE;
+use net::{
+    Client, ClientEvent, ClientPacket, Device, DeviceType, NetError, ServerEvent, ServerPacket,
+    Transport,
+};
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::{BinaryType, MessageEvent, WebSocket};
+
+use crate::adapters::tauri::{invoke_send_device_config, invoke_tauri_window_command};
+use crate::adapters::ws::{
+    load_or_create_browser_device, BrowserWebSocketAdapter, LapapiClientHandler,
+};
+use crate::ui::lapapi::{LapapiCenterView, LapapiInspector, LapapiSidebar, WifiConfigModal};
+
+/// Root Lapapi macOS component written in clean Leptos architecture.
+#[component]
+pub fn App() -> impl IntoView {
+    let is_focused = RwSignal::new(true);
+    let is_lights_hovered = RwSignal::new(false);
+    let zoom_level = RwSignal::new(1.0f64);
+
+    // WebSocket state
+    let is_connected = RwSignal::new(false);
+    let command_sender = RwSignal::new(None::<UnboundedSender<ClientPacket>>);
+    let sequence_id = Arc::new(AtomicU8::new(0));
+    let logs = RwSignal::new(Vec::<String>::new());
+
+    // Domain data
+    let current_game = RwSignal::new(Game::new(Discipline::Fiba5vs5));
+    let available_games = RwSignal::new(Vec::<Game>::new());
+    let connected_devices = RwSignal::new(Vec::<Device>::new());
+    let selected_device_sn = RwSignal::new(None::<String>);
+    let my_device = RwSignal::new(
+        Device::try_new(DeviceType::WebBrowser, "sn-lap-0000", "lapapi-app")
+            .expect("valid browser DeviceConfig"),
+    );
+
+    // Wi-Fi Config Modal state
+    let is_wifi_modal_open = RwSignal::new(false);
+    let wifi_target_ip = RwSignal::new("192.168.4.1".to_string());
+    let wifi_modal_sn = RwSignal::new("sn-lap-0000".to_string());
+    let wifi_modal_id = RwSignal::new("lapapi-worker".to_string());
+    let wifi_loading = RwSignal::new(false);
+    let wifi_status_msg = RwSignal::new(None::<String>);
+
+    let add_log = move |message: String| {
+        logs.update(|buf| {
+            buf.push(message);
+            if buf.len() > 60 {
+                buf.remove(0);
+            }
+        });
+    };
+
+    // Zooming logic: driven by macOS System Menu (Properties) and ⌘+/⌘-/⌘0
+    let on_zoom_in = Callback::new(move |()| {
+        zoom_level.update(|z| {
+            *z = (*z + 0.1).min(1.75);
+        });
+    });
+
+    let on_zoom_out = Callback::new(move |()| {
+        zoom_level.update(|z| {
+            *z = (*z - 0.1).max(0.6);
+        });
+    });
+
+    let on_zoom_reset = Callback::new(move |()| {
+        zoom_level.set(1.0);
+    });
+
+    // Window events, OS menu events and keyboard shortcuts (⌘+, ⌘-, ⌘0)
+    Effect::new(move |_| {
+        if let Some(window) = web_sys::window() {
+            let on_focus = {
+                let is_focused = is_focused;
+                Closure::<dyn FnMut()>::new(move || {
+                    is_focused.set(true);
+                })
+            };
+            let on_blur = {
+                let is_focused = is_focused;
+                Closure::<dyn FnMut()>::new(move || {
+                    is_focused.set(false);
+                })
+            };
+
+            let on_keydown = {
+                let on_zoom_in = on_zoom_in;
+                let on_zoom_out = on_zoom_out;
+                let on_zoom_reset = on_zoom_reset;
+                Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |e: web_sys::KeyboardEvent| {
+                    let is_mod = e.meta_key() || e.ctrl_key();
+                    if is_mod {
+                        let key = e.key();
+                        if key == "=" || key == "+" {
+                            e.prevent_default();
+                            on_zoom_in.run(());
+                        } else if key == "-" || key == "_" {
+                            e.prevent_default();
+                            on_zoom_out.run(());
+                        } else if key == "0" {
+                            e.prevent_default();
+                            on_zoom_reset.run(());
+                        }
+                    }
+                })
+            };
+
+            let _ = window
+                .add_event_listener_with_callback("focus", on_focus.as_ref().unchecked_ref());
+            let _ = window
+                .add_event_listener_with_callback("blur", on_blur.as_ref().unchecked_ref());
+            let _ = window
+                .add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref());
+
+            on_focus.forget();
+            on_blur.forget();
+            on_keydown.forget();
+
+            // Native macOS Menu Bar events emitted by Tauri
+            if let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
+                && let Ok(event_obj) = js_sys::Reflect::get(&tauri_obj, &JsValue::from_str("event"))
+                && let Ok(listen_fn) = js_sys::Reflect::get(&event_obj, &JsValue::from_str("listen"))
+                && let Ok(func) = listen_fn.dyn_into::<js_sys::Function>()
+            {
+                // Window Focus
+                let on_tauri_focus = {
+                    let is_focused = is_focused;
+                    Closure::<dyn FnMut(JsValue)>::new(move |evt: JsValue| {
+                        if let Ok(payload) = js_sys::Reflect::get(&evt, &JsValue::from_str("payload"))
+                            && let Some(focused) = payload.as_bool()
+                        {
+                            is_focused.set(focused);
+                        }
+                    })
+                };
+                let _ = func.call2(
+                    &event_obj,
+                    &JsValue::from_str("lapapi-focus-changed"),
+                    on_tauri_focus.as_ref().unchecked_ref(),
+                );
+                on_tauri_focus.forget();
+
+                // OS Menu: Zoom In
+                let on_zin = {
+                    let on_zoom_in = on_zoom_in;
+                    Closure::<dyn FnMut(JsValue)>::new(move |_| {
+                        on_zoom_in.run(());
+                    })
+                };
+                let _ = func.call2(&event_obj, &JsValue::from_str("lapapi-zoom-in"), on_zin.as_ref().unchecked_ref());
+                on_zin.forget();
+
+                // OS Menu: Zoom Out
+                let on_zout = {
+                    let on_zoom_out = on_zoom_out;
+                    Closure::<dyn FnMut(JsValue)>::new(move |_| {
+                        on_zoom_out.run(());
+                    })
+                };
+                let _ = func.call2(&event_obj, &JsValue::from_str("lapapi-zoom-out"), on_zout.as_ref().unchecked_ref());
+                on_zout.forget();
+
+                // OS Menu: Zoom Reset
+                let on_zreset = {
+                    let on_zoom_reset = on_zoom_reset;
+                    Closure::<dyn FnMut(JsValue)>::new(move |_| {
+                        on_zoom_reset.run(());
+                    })
+                };
+                let _ = func.call2(&event_obj, &JsValue::from_str("lapapi-zoom-reset"), on_zreset.as_ref().unchecked_ref());
+                on_zreset.forget();
+            }
+        }
+    });
+
+    // WebSocket connection lifecycle
+    Effect::new(move |_| {
+        let client_device = load_or_create_browser_device();
+        my_device.set(client_device);
+
+        let websocket_url = "ws://192.168.0.106:3000/ws".to_string();
+
+        if let Ok(websocket) = WebSocket::new(&websocket_url) {
+            websocket.set_binary_type(BinaryType::Arraybuffer);
+
+            let (outgoing_tx, mut outgoing_rx) = mpsc::unbounded::<[u8; PACKET_SIZE]>();
+            let (incoming_tx, incoming_rx) = mpsc::unbounded::<[u8; PACKET_SIZE]>();
+            let (packet_tx, mut packet_rx) = mpsc::unbounded::<ServerPacket>();
+            let (command_tx, mut command_rx) = mpsc::unbounded::<ClientPacket>();
+
+            // On open
+            {
+                let connected_clone = is_connected;
+                let command_tx_open = command_tx.clone();
+                let onopen = Closure::wrap(Box::new(move |_event: JsValue| {
+                    connected_clone.set(true);
+                    add_log("Połączono z serwerem WebSocket.".to_string());
+
+                    let handshake =
+                        ClientPacket::new(ClientEvent::HandshakeRequest, 0, client_device.to_bytes());
+                    let _ = command_tx_open.unbounded_send(handshake);
+                }) as Box<dyn FnMut(JsValue)>);
+                websocket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
+                onopen.forget();
+            }
+
+            // On message
+            {
+                let incoming_tx_message = incoming_tx.clone();
+                let onmessage = Closure::wrap(Box::new(move |event: MessageEvent| {
+                    if let Ok(buffer) = event.data().dyn_into::<js_sys::ArrayBuffer>() {
+                        let array = js_sys::Uint8Array::new(&buffer);
+                        if array.length() as usize == PACKET_SIZE {
+                            let mut data_array = [0u8; PACKET_SIZE];
+                            array.copy_to(&mut data_array);
+                            let _ = incoming_tx_message.unbounded_send(data_array);
+                        }
+                    }
+                }) as Box<dyn FnMut(MessageEvent)>);
+                websocket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
+                onmessage.forget();
+            }
+
+            // On close
+            {
+                let connected_clone = is_connected;
+                let devices_clone = connected_devices;
+                let games_clone = available_games;
+                let incoming_tx_close = incoming_tx;
+                let onclose = Closure::wrap(Box::new(move |_event: JsValue| {
+                    connected_clone.set(false);
+                    devices_clone.set(Vec::new());
+                    games_clone.set(Vec::new());
+                    incoming_tx_close.close_channel();
+                    add_log("Połączenie WebSocket zamknięte.".to_string());
+                }) as Box<dyn FnMut(JsValue)>);
+                websocket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
+                onclose.forget();
+            }
+
+            // Outgoing WebSocket sender task
+            {
+                let websocket_sender = websocket.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    while let Some(bytes) = outgoing_rx.next().await {
+                        let uint8_array = js_sys::Uint8Array::from(&bytes[..]);
+                        if let Err(err) =
+                            websocket_sender.send_with_array_buffer(&uint8_array.buffer())
+                        {
+                            add_log(format!("Błąd nadawania WebSocket: {err:?}"));
+                        }
+                    }
+                });
+            }
+
+            // Incoming server packet handler task
+            {
+                let current_game_clone = current_game;
+                let games_state_clone = available_games;
+                let devices_state_clone = connected_devices;
+
+                wasm_bindgen_futures::spawn_local(async move {
+                    let mut device_list: Vec<Device> = Vec::new();
+                    let mut game_list: Vec<Game> = Vec::new();
+
+                    while let Some(first_packet) = packet_rx.next().await {
+                        let mut current = Some(first_packet);
+                        let mut devices_changed = false;
+                        let mut games_changed = false;
+
+                        while let Some(packet) = current {
+                            match packet.event() {
+                                ServerEvent::HandshakeAck | ServerEvent::GameUpdate => {
+                                    if let Ok(game) = Game::try_from(packet) {
+                                        if let Some(existing) =
+                                            game_list.iter_mut().find(|g| g.id() == game.id())
+                                        {
+                                            *existing = game;
+                                        } else {
+                                            game_list.push(game);
+                                            game_list.sort_by_key(Game::id);
+                                        }
+                                        games_changed = true;
+
+                                        if current_game_clone.get().id() == game.id()
+                                            || current_game_clone.get().id() == 0
+                                        {
+                                            current_game_clone.set(game);
+                                        }
+                                    }
+                                }
+                                ServerEvent::GameListUpdate => {
+                                    if let Ok(game) = Game::try_from(packet) {
+                                        if let Some(existing) =
+                                            game_list.iter_mut().find(|g| g.id() == game.id())
+                                        {
+                                            *existing = game;
+                                        } else {
+                                            game_list.push(game);
+                                            game_list.sort_by_key(Game::id);
+                                        }
+                                        games_changed = true;
+                                    }
+                                }
+                                ServerEvent::DeviceUpdate => {
+                                    if let Ok(updated_dev) = Device::try_from(packet) {
+                                        if let Some(existing) =
+                                            device_list.iter_mut().find(|d| {
+                                                d.serial_number() == updated_dev.serial_number()
+                                            })
+                                        {
+                                            *existing = updated_dev;
+                                        } else {
+                                            device_list.push(updated_dev);
+                                        }
+                                        devices_changed = true;
+                                        add_log(format!(
+                                            "[URZĄDZENIE] {:?} (sn={}) -> Gra #{}",
+                                            updated_dev.device_type(),
+                                            updated_dev.serial_number().unwrap_or("-"),
+                                            updated_dev.game_id()
+                                        ));
+                                    }
+                                }
+                                ServerEvent::DeviceDisconnect => {
+                                    if let Ok(dc_dev) = Device::try_from(packet) {
+                                        device_list
+                                            .retain(|d| d.serial_number() != dc_dev.serial_number());
+                                        devices_changed = true;
+                                        add_log(format!(
+                                            "[ROZŁĄCZONO] {:?}",
+                                            dc_dev.serial_number().unwrap_or("-")
+                                        ));
+                                    }
+                                }
+                                _ => {}
+                            }
+
+                            current = packet_rx.try_recv().ok();
+                        }
+
+                        if devices_changed {
+                            devices_state_clone.set(device_list.clone());
+                        }
+                        if games_changed {
+                            games_state_clone.set(game_list.clone());
+                        }
+                    }
+                });
+            }
+
+            // Client loop
+            {
+                let adapter = BrowserWebSocketAdapter::new(outgoing_tx, incoming_rx);
+                let transport = Transport::new(adapter, None);
+                let handler = LapapiClientHandler::new(packet_tx);
+                let mut client = Client::new(transport, handler);
+
+                wasm_bindgen_futures::spawn_local(async move {
+                    enum Step {
+                        Polled(Result<ServerPacket, NetError>),
+                        Command(Option<ClientPacket>),
+                    }
+
+                    loop {
+                        let step = {
+                            let poll_future = pin!(client.poll());
+                            let send_future = pin!(command_rx.next());
+
+                            match future::select(poll_future, send_future).await {
+                                Either::Left((res, _)) => Step::Polled(res),
+                                Either::Right((cmd, _)) => Step::Command(cmd),
+                            }
+                        };
+
+                        match step {
+                            Step::Polled(Ok(_)) => {}
+                            Step::Polled(Err(NetError::InvalidPacket(err))) => {
+                                add_log(format!("[BŁĄD PAKIETU] {err}"));
+                            }
+                            Step::Polled(Err(NetError::Disconnected | _)) => break,
+                            Step::Command(Some(packet)) => {
+                                client.send(&packet).await;
+                            }
+                            Step::Command(None) => break,
+                        }
+                    }
+                });
+            }
+
+            command_sender.set(Some(command_tx));
+        }
+    });
+
+    // Helper for dispatching ClientPackets
+    let send_client_packet = {
+        let seq_arc = sequence_id.clone();
+        Arc::new(move |event: ClientEvent, payload: [u8; 59]| {
+            if let Some(sender) = command_sender.get().as_ref() {
+                let current_seq = seq_arc.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+
+                let packet = ClientPacket::new(event, current_seq, payload);
+                if sender.unbounded_send(packet).is_ok() {
+                    add_log(format!("[WYSŁANO] {event:?} (seq={current_seq})"));
+                }
+            }
+        })
+    };
+
+    let on_send_event = {
+        let send = send_client_packet.clone();
+        Callback::new(move |event: ClientEvent| {
+            send(event, current_game.get().to_bytes());
+        })
+    };
+
+    let on_select_game = {
+        let send = send_client_packet.clone();
+        Callback::new(move |game_id: u16| {
+            if let Some(target) = available_games.get().iter().find(|g| g.id() == game_id) {
+                current_game.set(*target);
+            }
+            let target_game = Game::new_with_id(game_id, Discipline::Fiba5vs5);
+            send(ClientEvent::GameSelect, target_game.to_bytes());
+        })
+    };
+
+    let on_create_game = {
+        let send = send_client_packet.clone();
+        Callback::new(move |()| {
+            send(ClientEvent::GameCreate, current_game.get().to_bytes());
+        })
+    };
+
+    let on_disconnect_device = {
+        let send = send_client_packet.clone();
+        Callback::new(move |target: Device| {
+            send(ClientEvent::DeviceDisconnect, target.to_bytes());
+        })
+    };
+
+    let on_assign_device_game = {
+        let send = send_client_packet.clone();
+        Callback::new(move |(mut target, game_id): (Device, u16)| {
+            target.set_game_id(game_id);
+            send(ClientEvent::DeviceAssignGame, target.to_bytes());
+        })
+    };
+
+    let on_select_device = Callback::new(move |sn: String| {
+        selected_device_sn.set(Some(sn));
+    });
+
+    // Window drag and controls
+    let on_start_drag = Callback::new(|event: web_sys::MouseEvent| {
+        if event.buttons() == 1 {
+            invoke_tauri_window_command("window_start_drag");
+        }
+    });
+
+    let stop_propagation = Callback::new(|event: web_sys::MouseEvent| {
+        event.stop_propagation();
+    });
+
+    let on_close = Callback::new(|event: web_sys::MouseEvent| {
+        event.stop_propagation();
+        invoke_tauri_window_command("window_close");
+    });
+
+    let on_minimize = Callback::new(|event: web_sys::MouseEvent| {
+        event.stop_propagation();
+        invoke_tauri_window_command("window_minimize");
+    });
+
+    let on_maximize = Callback::new(|event: web_sys::MouseEvent| {
+        event.stop_propagation();
+        invoke_tauri_window_command("window_toggle_maximize");
+    });
+
+    // Wi-Fi dialog callbacks
+    let on_open_wifi_setup = Callback::new(move |()| {
+        add_log("[UI] Otwieranie konfiguracji Wi-Fi".to_string());
+        wifi_target_ip.set("192.168.4.1".to_string());
+        wifi_status_msg.set(None);
+        wifi_loading.set(false);
+        is_wifi_modal_open.set(true);
+    });
+
+    let on_open_wifi_for_device = Callback::new(move |device: Device| {
+        let sn = device.serial_number().unwrap_or("sn-lap-0000").to_string();
+        let id = device.device_id().unwrap_or("lapapi-worker").to_string();
+        add_log(format!("[UI] Otwieranie konfiguracji Wi-Fi dla urządzenia: {}", sn));
+        wifi_modal_sn.set(sn);
+        wifi_modal_id.set(id);
+        wifi_target_ip.set("192.168.4.1".to_string());
+        wifi_status_msg.set(None);
+        wifi_loading.set(false);
+        is_wifi_modal_open.set(true);
+    });
+
+    let on_close_wifi_modal = Callback::new(move |_: web_sys::MouseEvent| {
+        is_wifi_modal_open.set(false);
+    });
+
+    let on_submit_wifi_config = Callback::new(
+        move |(ip, sn, id, ssid, pass): (String, String, String, String, String)| {
+            wifi_loading.set(true);
+            wifi_status_msg.set(Some("Wysyłanie pakietu DeviceConfigSet przez UDP...".to_string()));
+
+            wasm_bindgen_futures::spawn_local(async move {
+                match invoke_send_device_config(ip, sn, id, ssid, pass).await {
+                    Ok(msg) => {
+                        wifi_status_msg.set(Some(msg.clone()));
+                        add_log(format!("[UDP SETUP] {}", msg));
+                    }
+                    Err(err_msg) => {
+                        wifi_status_msg.set(Some(format!("Błąd: {}", err_msg)));
+                        add_log(format!("[UDP ERROR] {}", err_msg));
+                    }
+                }
+                wifi_loading.set(false);
+            });
+        },
+    );
+
+    // Dynamic background styling based on focus
+    let root_bg_class = move || {
+        if is_focused.get() {
+            "bg-[#101318]/70 border-white/[0.12]"
+        } else {
+            "bg-[#1c202a]/75 border-white/[0.08]"
+        }
+    };
+
+    let sidebar_bg_class = Signal::derive(move || {
+        if is_focused.get() {
+            "bg-[#13161f]/45"
+        } else {
+            "bg-[#202533]/50"
+        }
+    });
+
+    let main_bg_class = Signal::derive(move || {
+        if is_focused.get() {
+            "bg-[#0b0e14]/30"
+        } else {
+            "bg-[#1e2230]/40"
+        }
+    });
+
+    let inspector_bg_class = Signal::derive(move || {
+        if is_focused.get() {
+            "bg-[#13161f]/40"
+        } else {
+            "bg-[#202533]/45"
+        }
+    });
+
+    let selected_device = Signal::derive(move || {
+        selected_device_sn.get().and_then(|sn| {
+            connected_devices
+                .get()
+                .iter()
+                .find(|d| d.serial_number().ok() == Some(sn.as_str()))
+                .copied()
+        })
+    });
+
+    view! {
+        <div
+            class=move || format!("w-screen h-screen overflow-hidden rounded-xl border {} transition-colors duration-200 flex text-white/90 select-none font-sans antialiased text-[13px]", root_bg_class())
+            style=move || format!("zoom: {};", zoom_level.get())
+        >
+            // Tree-based Sidebar (Games and Devices)
+            <LapapiSidebar
+                is_focused=is_focused.into()
+                is_lights_hovered=is_lights_hovered
+                on_start_drag=on_start_drag
+                stop_propagation=stop_propagation
+                on_close=on_close
+                on_minimize=on_minimize
+                on_maximize=on_maximize
+                games=available_games.into()
+                selected_game_id=Signal::derive(move || current_game.get().id())
+                on_select_game=on_select_game
+                on_create_game=on_create_game
+                devices=connected_devices.into()
+                selected_device_sn=selected_device_sn.into()
+                on_select_device=on_select_device
+                is_connected=is_connected.into()
+                sidebar_bg_class=sidebar_bg_class
+                on_open_wifi_setup=on_open_wifi_setup
+            />
+
+            // Center Scoreboard and WebSocket Control View
+            <LapapiCenterView
+                game=current_game.into()
+                is_connected=is_connected.into()
+                on_start_drag=on_start_drag
+                stop_propagation=stop_propagation
+                on_send_event=on_send_event
+                main_bg_class=main_bg_class
+                devices=connected_devices.into()
+                on_disconnect_device=on_disconnect_device
+                on_assign_device_game=on_assign_device_game
+            />
+
+            // Right Inspector & Logs Panel
+            <LapapiInspector
+                selected_game=current_game.into()
+                selected_device=selected_device
+                logs=logs.into()
+                on_start_drag=on_start_drag
+                inspector_bg_class=inspector_bg_class
+                on_disconnect_device=on_disconnect_device
+                on_open_wifi_config=on_open_wifi_for_device
+            />
+
+            // Wi-Fi Config Modal (OTA UDP)
+            <WifiConfigModal
+                is_open=is_wifi_modal_open.into()
+                on_close=on_close_wifi_modal
+                on_submit=on_submit_wifi_config
+                is_loading=wifi_loading.into()
+                status_message=wifi_status_msg.into()
+                initial_target_ip=wifi_target_ip.into()
+                initial_serial_number=wifi_modal_sn.into()
+                initial_device_id=wifi_modal_id.into()
+            />
+        </div>
+    }
+}
