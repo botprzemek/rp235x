@@ -7,13 +7,13 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::vec::Vec;
 
-use aes_gcm::aead::{Aead, Generate};
-use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier};
-
 use crate::{Config, ConfigError, Keys};
 #[cfg(feature = "serde")]
 use crate::{ConfigBuilder, Input};
+
+use aes_gcm::aead::{Aead, Generate};
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier};
 
 /// Reads a [`Config`] from a JSON file on disk.
 #[cfg(feature = "serde")]

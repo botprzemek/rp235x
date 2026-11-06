@@ -1,15 +1,16 @@
 //! Application builder, server startup, and graceful shutdown orchestration.
 
 use std::marker::PhantomData;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-
-use tokio::net::{TcpListener, UdpSocket};
-use tokio::signal;
 
 use crate::adapters::data::ReDBProvider;
 use crate::adapters::net::{WebDriver, WorkerDriver};
 use crate::adapters::repositories::Registry;
 use crate::services::Services;
+
+use tokio::net::{TcpListener, UdpSocket};
+use tokio::signal;
 
 /// Typestate marker indicating that a listener address has not been configured.
 pub struct Absent;
@@ -21,6 +22,7 @@ pub struct Present;
 pub struct Application<HttpState, UdpState> {
     http_address: Option<String>,
     udp_address: Option<String>,
+    database_path: Option<PathBuf>,
     _http: PhantomData<HttpState>,
     _udp: PhantomData<UdpState>,
 }
@@ -29,6 +31,7 @@ pub struct Application<HttpState, UdpState> {
 pub struct ApplicationBuilder<HttpState = Absent, UdpState = Absent> {
     http_address: Option<String>,
     udp_address: Option<String>,
+    database_path: Option<PathBuf>,
     _http: PhantomData<HttpState>,
     _udp: PhantomData<UdpState>,
 }
@@ -78,6 +81,7 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         Application {
             http_address: self.http_address,
             udp_address: self.udp_address,
+            database_path: self.database_path,
             _http: PhantomData,
             _udp: PhantomData,
         }
@@ -93,6 +97,7 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         Application {
             http_address: self.http_address,
             udp_address: self.udp_address,
+            database_path: self.database_path,
             _http: PhantomData,
             _udp: PhantomData,
         }
@@ -100,7 +105,17 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
 
     /// Initializes the database, services, and configured network listeners.
     pub async fn start(self) -> Arc<Services> {
-        let database = ReDBProvider::new();
+        let database = match &self.database_path {
+            Some(path) => {
+                println!("INFO: Using ReDB database at {}", path.display());
+                ReDBProvider::open(path)
+            }
+            None => {
+                let default_path = ReDBProvider::default_path();
+                println!("INFO: Using default ReDB database at {}", default_path.display());
+                ReDBProvider::open(&default_path)
+            }
+        };
         let registry = Registry::new(database);
         let services = Arc::new(Services::new(&registry));
 
@@ -135,6 +150,7 @@ impl ApplicationBuilder<Absent, Absent> {
         Self {
             http_address: None,
             udp_address: None,
+            database_path: None,
             _http: PhantomData,
             _udp: PhantomData,
         }
@@ -142,12 +158,20 @@ impl ApplicationBuilder<Absent, Absent> {
 }
 
 impl<HttpState, UdpState> ApplicationBuilder<HttpState, UdpState> {
+    /// Configures the ReDB database file path.
+    #[must_use]
+    pub fn database_path<P: AsRef<Path>>(mut self, path: P) -> Self {
+        self.database_path = Some(path.as_ref().to_path_buf());
+        self
+    }
+
     /// Configures the HTTP server bind `address`.
     #[must_use]
     pub fn http_address(self, address: &str) -> ApplicationBuilder<Present, UdpState> {
         ApplicationBuilder {
             http_address: Some(address.to_string()),
             udp_address: self.udp_address,
+            database_path: self.database_path,
             _http: PhantomData,
             _udp: PhantomData,
         }
@@ -159,6 +183,7 @@ impl<HttpState, UdpState> ApplicationBuilder<HttpState, UdpState> {
         ApplicationBuilder {
             http_address: self.http_address,
             udp_address: Some(address.to_string()),
+            database_path: self.database_path,
             _http: PhantomData,
             _udp: PhantomData,
         }
@@ -170,6 +195,7 @@ impl<HttpState, UdpState> ApplicationBuilder<HttpState, UdpState> {
         Application {
             http_address: self.http_address,
             udp_address: self.udp_address,
+            database_path: self.database_path,
             _http: PhantomData,
             _udp: PhantomData,
         }

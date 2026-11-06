@@ -2,9 +2,9 @@
 
 use core::time::Duration;
 
-use net::{ClientPacket, ServerPacket};
-
 use crate::{Discipline, Quarter, Scorable, Score, Scores, State, Team, layout};
+
+use net::{ClientPacket, ServerPacket};
 
 /// Decomposed regulation clock time in minutes, seconds, and centiseconds.
 #[non_exhaustive]
@@ -39,6 +39,8 @@ pub struct Game {
 
     regulation_millis: u32,
     clock_millis: u32,
+
+    session_token: u32,
 }
 
 impl Default for Game {
@@ -107,6 +109,7 @@ impl Game {
             away_score: 0,
             regulation_millis: config.regulation_millis,
             clock_millis: config.clock_millis,
+            session_token: 0,
         }
     }
 
@@ -122,6 +125,7 @@ impl Game {
             away_score: 0,
             regulation_millis: 0,
             clock_millis: 0,
+            session_token: 0,
         }
     }
 
@@ -170,6 +174,7 @@ impl Game {
         let mut regulation_millis = [0u8; 4];
         let mut clock_millis = [0u8; 4];
         let mut id_bytes = [0u8; 2];
+        let mut session_token_bytes = [0u8; 4];
 
         home_score.copy_from_slice(&bytes[layout::HOME_SCORE_START..layout::HOME_SCORE_END]);
         away_score.copy_from_slice(&bytes[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END]);
@@ -179,6 +184,7 @@ impl Game {
         );
         clock_millis.copy_from_slice(&bytes[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]);
         id_bytes.copy_from_slice(&bytes[layout::ID_START..layout::ID_END]);
+        session_token_bytes.copy_from_slice(&bytes[layout::SESSION_TOKEN_START..layout::SESSION_TOKEN_END]);
 
         let raw_id = u16::from_be_bytes(id_bytes);
         let id = if raw_id == 0 { 1 } else { raw_id };
@@ -194,6 +200,7 @@ impl Game {
 
             regulation_millis: u32::from_be_bytes(regulation_millis),
             clock_millis: u32::from_be_bytes(clock_millis),
+            session_token: u32::from_be_bytes(session_token_bytes),
         })
     }
 
@@ -211,6 +218,7 @@ impl Game {
         let regulation_millis_bytes = self.regulation_millis.to_be_bytes();
         let clock_millis_bytes = self.clock_millis.to_be_bytes();
         let id_bytes = self.id.to_be_bytes();
+        let session_token_bytes = self.session_token.to_be_bytes();
 
         bytes[layout::HOME_SCORE_START..layout::HOME_SCORE_END].copy_from_slice(&home_score_bytes);
         bytes[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END].copy_from_slice(&away_score_bytes);
@@ -219,8 +227,20 @@ impl Game {
         bytes[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]
             .copy_from_slice(&clock_millis_bytes);
         bytes[layout::ID_START..layout::ID_END].copy_from_slice(&id_bytes);
+        bytes[layout::SESSION_TOKEN_START..layout::SESSION_TOKEN_END].copy_from_slice(&session_token_bytes);
 
         bytes
+    }
+
+    /// Returns the session authentication token.
+    #[must_use]
+    pub fn session_token(&self) -> u32 {
+        self.session_token
+    }
+
+    /// Sets the session authentication token.
+    pub fn set_session_token(&mut self, token: u32) {
+        self.session_token = token;
     }
 
     /// Returns the current [`State`] of the game.
@@ -256,6 +276,24 @@ impl Game {
     #[must_use]
     pub fn clock_millis(&self) -> u32 {
         self.clock_millis
+    }
+
+    /// Pure presentation helper: decomposes regulation milliseconds into (minutes, seconds, centiseconds).
+    #[must_use]
+    pub fn display_regulation_time(&self) -> (u8, u8, u8) {
+        let total_seconds = self.regulation_millis / 1000;
+        let minutes = (total_seconds / 60) as u8;
+        let seconds = (total_seconds % 60) as u8;
+        let centiseconds = ((self.regulation_millis % 1000) / 10) as u8;
+        (minutes, seconds, centiseconds)
+    }
+
+    /// Pure presentation helper: decomposes shot clock milliseconds into (seconds, centiseconds).
+    #[must_use]
+    pub fn display_shot_clock(&self) -> (u8, u8) {
+        let seconds = (self.clock_millis / 1000) as u8;
+        let centiseconds = ((self.clock_millis % 1000) / 10) as u8;
+        (seconds, centiseconds)
     }
 
     /// Advances the game clock by `delta` if the game is currently [`State::Running`].

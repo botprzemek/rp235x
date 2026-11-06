@@ -2,14 +2,14 @@
 
 use std::sync::Arc;
 
-use axum::Json;
+use crate::services::Services;
+
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::Json;
 use axum::response::IntoResponse;
 use axum::routing::{self, Router};
 use basketball::{Score, Team};
-
-use crate::services::Services;
 
 /// Path parameters for querying a single team's score.
 #[derive(serde::Deserialize)]

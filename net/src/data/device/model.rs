@@ -2,10 +2,10 @@
 
 use core::str;
 
-use config::{ConfigError, DeviceConfig};
-
 use crate::data::device::layout;
 use crate::{ClientPacket, ServerPacket};
+
+use config::{ConfigError, DeviceConfig};
 
 /// Kind of client device connected to the master server.
 #[non_exhaustive]

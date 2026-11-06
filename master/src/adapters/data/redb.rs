@@ -1,6 +1,8 @@
 //! Embedded ReDB database provider and table definitions.
 
-use std::path::Path;
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use redb::{Builder, Database, TableDefinition};
@@ -13,7 +15,7 @@ pub const GAME_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("games
 /// ReDB table storing serialized [`net::Device`] entries keyed by serial number.
 pub const DEVICES_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("devices");
 
-/// Shared connection provider for the local `master.redb` database.
+/// Shared connection provider for the local ReDB database.
 #[derive(Clone)]
 pub struct ReDBProvider {
     connection: Arc<Database>,
@@ -26,14 +28,54 @@ impl Default for ReDBProvider {
 }
 
 impl ReDBProvider {
-    /// Opens or creates `master.redb` and ensures the required tables exist.
+    /// Determines the default database path using environment variables or standard local storage.
+    #[must_use]
+    pub fn default_path() -> PathBuf {
+        if let Ok(path_str) = env::var("MASTER_DB_PATH") {
+            return PathBuf::from(path_str);
+        }
+
+        // Prioritize existing local database in workspace or current working directory
+        if Path::new("master/master.redb").exists() {
+            return PathBuf::from("master/master.redb");
+        }
+        if Path::new("master.redb").exists() {
+            return PathBuf::from("master.redb");
+        }
+
+        // Standard user data directory fallback
+        if let Ok(home) = env::var("HOME") {
+            let data_dir = PathBuf::from(home).join(".local/share/scoreboard-master");
+            let _ = fs::create_dir_all(&data_dir);
+            return data_dir.join("master.redb");
+        }
+
+        PathBuf::from("master.redb")
+    }
+
+    /// Opens or creates the database at the default path and ensures required tables exist.
     #[must_use]
     pub fn new() -> Self {
-        let database_path = Path::new("master.redb");
+        Self::open(&Self::default_path())
+    }
+
+    /// Opens or creates ReDB at the specified `database_path` and ensures required tables exist.
+    pub fn open(database_path: &Path) -> Self {
+        if let Some(parent) = database_path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            let _ = fs::create_dir_all(parent);
+        }
+
         let connection = Builder::new()
             .set_cache_size(DATABASE_CACHE_SIZE)
             .create(database_path)
-            .expect("failed to open or create master.redb database");
+            .unwrap_or_else(|err| {
+                panic!(
+                    "failed to open or create ReDB database at {}: {err}",
+                    database_path.display()
+                )
+            });
         let connection = Arc::new(connection);
 
         {

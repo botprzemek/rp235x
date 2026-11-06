@@ -1,13 +1,13 @@
 //! Shared [`Packet`] trait and payload serialization helpers.
 
-#[cfg(feature = "serde")]
-use serde::Serializer;
-#[cfg(feature = "serde")]
-use serde::ser::SerializeTuple;
-
 use crate::event::{ClientEvent, ServerEvent};
 use crate::layout;
 use crate::packet::{ClientPacket, ServerPacket};
+
+#[cfg(feature = "serde")]
+use serde::ser::SerializeTuple;
+#[cfg(feature = "serde")]
+use serde::Serializer;
 
 /// Common interface for fixed-size 64-byte wire packets.
 pub trait Packet: Sized + Copy + Send + Sync {
@@ -91,7 +91,7 @@ impl Packet for ServerPacket {
 
 /// Serializes the fixed-size packet payload array as a serde tuple.
 #[cfg(feature = "serde")]
-pub fn serialize_data<S>(data: &[u8; layout::DATA_SIZE], serializer: S) -> Result<S::Ok, S::Error>
+pub(crate) fn serialize_data<S>(data: &[u8; layout::DATA_SIZE], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {

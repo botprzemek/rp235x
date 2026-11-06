@@ -6,6 +6,6 @@ pub mod server;
 
 pub use base::Packet;
 #[cfg(feature = "serde")]
-pub use base::serialize_data;
+pub(crate) use base::serialize_data;
 pub use client::ClientPacket;
 pub use server::ServerPacket;

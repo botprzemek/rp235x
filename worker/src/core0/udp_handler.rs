@@ -1,22 +1,21 @@
 //! Unified UDP handler for Worker state synchronization and OTA Wi-Fi configuration.
 
+use crate::peripherals::flash::write_config_to_flash;
+use crate::state::GAME_STATE;
+
 use basketball::Game;
-use config::Config;
-use config::ConfigBuilder;
 use config::flash::FlashReader;
+use config::{Config, ConfigBuilder};
 use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_net::{IpAddress, IpEndpoint, Stack};
-use embassy_rp::Peri;
 use embassy_rp::peripherals::{FLASH, WATCHDOG};
 use embassy_rp::watchdog::Watchdog;
+use embassy_rp::Peri;
 use embassy_time::{Duration, Ticker, Timer};
 use net::event::{ClientEvent, ServerEvent};
 use net::layout::PACKET_SIZE;
 use net::{ClientPacket, Device, DeviceConfigPacket, DeviceType, ServerPacket};
 use static_cell::StaticCell;
-
-use crate::peripherals::flash::write_config_to_flash;
-use crate::state::GAME_STATE;
 
 static UDP_RX_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
 static UDP_TX_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
@@ -98,7 +97,7 @@ pub async fn unified_udp_task(
         loop {
             defmt::info!("[WORKER] Szukanie mastera w sieci (Broadcast)...");
 
-            let master_endpoint = loop {
+            let (master_endpoint, mut session_token) = loop {
                 let client_packet =
                     ClientPacket::new(ClientEvent::HandshakeRequest, 0, device_bytes);
                 let packet_bytes = client_packet.to_bytes();
@@ -142,15 +141,27 @@ pub async fn unified_udp_task(
                     continue;
                 }
 
-                if ServerPacket::from_bytes(packet_buffer[..PACKET_SIZE].try_into().unwrap_or([0; PACKET_SIZE])).is_err() {
+                let Ok(server_packet) = ServerPacket::from_bytes(
+                    packet_buffer[..PACKET_SIZE]
+                        .try_into()
+                        .unwrap_or([0; PACKET_SIZE]),
+                ) else {
                     continue;
-                }
+                };
+
+                let session_token = if let Ok(game) = Game::try_from(server_packet) {
+                    GAME_STATE.set(game);
+                    game.session_token()
+                } else {
+                    0
+                };
 
                 defmt::info!(
-                    "[WORKER] Znaleziono mastera pod adresem: {}. Handshake zakończony!",
-                    remote_endpoint
+                    "[WORKER] Znaleziono mastera pod adresem: {}. Handshake zakończony (Token: {:x})!",
+                    remote_endpoint,
+                    session_token
                 );
-                break remote_endpoint.endpoint;
+                break (remote_endpoint.endpoint, session_token);
             };
 
             defmt::info!("[WORKER] Przejście do głównej pętli odbierania danych.");
@@ -194,8 +205,14 @@ pub async fn unified_udp_task(
                             };
 
                             if let Ok(game) = Game::try_from(packet) {
-                                let game_ref = GAME_STATE.lock().await;
-                                *game_ref.borrow_mut() = game;
+                                if packet.event() == ServerEvent::HandshakeAck {
+                                    session_token = game.session_token();
+                                    GAME_STATE.set(game);
+                                } else if session_token == 0 || game.session_token() == 0 || game.session_token() == session_token {
+                                    GAME_STATE.set(game);
+                                } else {
+                                    defmt::warn!("[WORKER] Odrzucono pakiet UDP: nieprawidłowy token sesji!");
+                                }
                             }
                         }
                         Err(error) => {

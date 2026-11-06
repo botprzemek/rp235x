@@ -1,0 +1,76 @@
+[workspace]
+resolver = "3"
+members = [
+    "basketball",
+    "benchmark",
+    "config",
+    "configurator",
+    "hmi",
+    "hmi/hmi-tauri",
+    "hub75",
+    "master",
+    "net",
+    "worker",
+]
+default-members = [
+    "basketball",
+    "benchmark",
+    "config",
+    "configurator",
+    "hmi",
+    "hub75",
+    "master",
+    "net",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[profile.dev]
+opt-level = 1
+debug = true
+incremental = true
+
+[profile.release]
+lto = true
+opt-level = "s"
+incremental = false
+codegen-units = 1
+
+[profile.bench]
+opt-level = 3
+debug = true
+
+[workspace.dependencies]
+basketball = { path = "basketball" }
+config = { path = "config", default-features = false }
+hub75 = { path = "hub75", default-features = false }
+net = { path = "net" }
+
+bytes = "1.12.1"
+cortex-m = { version = "0.7.6" }
+cortex-m-rt = { version = "0.7.0" }
+defmt = { version = "1.2.0" }
+defmt-rtt = { version = "1.0.0" }
+futures = { version = "0.3.34", default-features = false }
+gloo-net = { version = "0.7.0" }
+mime_guess = { version = "2.0.5" }
+redb = { version = "4.2.0" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151" }
+tempfile = { version = "3.27.0" }
+tokio = { version = "1.53.1" }
+uuid = { version = "1.23.2", features = ["serde"] }
+web-sys = { version = "0.3.105" }
+
+[patch.crates-io]
+embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+cyw43 = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
+cyw43-pio = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }

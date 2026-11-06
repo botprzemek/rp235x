@@ -6,7 +6,7 @@ use leptos::prelude::*;
 use net::Device;
 
 #[component]
-pub fn LapapiInspector(
+pub fn DeviceInspector(
     selected_game: Signal<Game>,
     selected_device: Signal<Option<Device>>,
     logs: Signal<Vec<String>>,
@@ -163,3 +163,5 @@ pub fn LapapiInspector(
         </aside>
     }
 }
+
+pub use DeviceInspector as LapapiInspector;

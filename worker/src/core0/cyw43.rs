@@ -3,6 +3,9 @@
 use core::hint;
 use core::mem;
 
+use crate::interrupts::Irqs;
+use crate::peripherals::NetPeripherals;
+
 use cyw43::{A4, Aligned, Control, NetDriver, SpiBus, State};
 use cyw43_pio::{DEFAULT_CLOCK_DIVIDER, PioSpi};
 use embassy_rp::dma::Channel;
@@ -10,9 +13,6 @@ use embassy_rp::gpio::{Level, Output};
 use embassy_rp::peripherals;
 use embassy_rp::pio::Pio;
 use static_cell::StaticCell;
-
-use crate::interrupts::Irqs;
-use crate::peripherals::NetPeripherals;
 
 type Runner<'driver> =
     cyw43::Runner<'driver, SpiBus<Output<'driver>, PioSpi<'driver, peripherals::PIO0, 0>>>;

@@ -1,10 +1,10 @@
 //! ReDB-backed repository for [`Device`] records.
 
-use config::DeviceConfig;
-use net::Device;
-
 use crate::adapters::data::{DEVICES_TABLE, ReDBProvider};
 use crate::adapters::repositories::Repository;
+
+use config::DeviceConfig;
+use net::Device;
 
 /// Persistence adapter for [`Device`] records in ReDB.
 #[derive(Clone)]

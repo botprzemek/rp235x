@@ -1,41 +1,37 @@
 [package]
 name = "hmi"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-basketball = { path = "../basketball", features = ["serde"] }
-config = { path = "../config", default-features = false }
-net = { path = "../net", features = ["serde", "std"] }
-hub75 = { path = "../hub75", default-features = false }
+basketball = { workspace = true, features = ["serde"] }
+config = { workspace = true, default-features = false }
+hub75 = { workspace = true, default-features = false }
+net = { workspace = true, features = ["serde", "std"] }
 
+console_error_panic_hook = "0.1.7"
+futures = { workspace = true }
+js-sys = "0.3.107"
 leptos = { version = "0.8.23", features = ["csr"] }
-serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-futures = { version = "0.3.34", default-features = false }
-web-sys = { version = "0.3.105", features = [
-    "CanvasRenderingContext2d",
-    "HtmlCanvasElement",
-    "HtmlInputElement",
-    "Element",
-    "DomRect",
-    "console",
-    "Window",
-    "Storage",
-    "WebSocket",
-    "BinaryType",
-    "MessageEvent",
-    "KeyboardEvent",
-] }
+serde = { workspace = true }
+serde_json = { workspace = true }
 wasm-bindgen = "0.2.105"
 wasm-bindgen-futures = "0.4.55"
-js-sys = "0.3.107"
-console_error_panic_hook = "0.1.7"
+web-sys = { workspace = true, features = [
+    "BinaryType",
+    "CanvasRenderingContext2d",
+    "DomRect",
+    "Element",
+    "HtmlCanvasElement",
+    "HtmlInputElement",
+    "KeyboardEvent",
+    "MessageEvent",
+    "Storage",
+    "WebSocket",
+    "Window",
+    "console",
+] }
 
 [features]
-default = ["csr"]
 csr = ["leptos/csr"]
-
-[workspace]
-members = ["hmi-tauri"]
-
+default = ["csr"]

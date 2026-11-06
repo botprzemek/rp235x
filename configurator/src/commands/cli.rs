@@ -1,12 +1,12 @@
 //! [`Commands`] enum and subcommand dispatcher.
 
-use clap::Subcommand;
-use config::ConfigError;
-
 use crate::commands::{
     CreateArgs, CreateCommand, FlashArgs, FlashCommand, PeekArgs, PeekCommand, VerifyArgs,
     VerifyCommand, ViewArgs, ViewCommand, WriteArgs, WriteCommand,
 };
+
+use clap::Subcommand;
+use config::ConfigError;
 
 /// Supported CLI subcommands.
 #[derive(Subcommand)]

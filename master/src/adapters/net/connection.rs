@@ -4,6 +4,9 @@ use core::time::Duration;
 use std::future;
 use std::sync::Arc;
 
+use crate::adapters::net::MasterServerHandler;
+use crate::services::{GameFrame, Observable, Services};
+
 use basketball::{Game, Scorable};
 use config::DeviceConfig;
 use net::layout::PACKET_SIZE;
@@ -13,9 +16,6 @@ use net::{
 };
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::time::{self, MissedTickBehavior};
-
-use crate::adapters::net::MasterServerHandler;
-use crate::services::{GameFrame, Observable, Services};
 
 /// Maximum number of queued control packets (acks, list updates) per connection.
 /// A peer that falls this far behind is considered dead and is disconnected.

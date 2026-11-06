@@ -2,9 +2,9 @@
 
 mod commands;
 
-use clap::Parser;
-
 use crate::commands::Commands;
+
+use clap::Parser;
 
 /// Top-level CLI parser for the `configurator` binary.
 #[derive(Parser)]

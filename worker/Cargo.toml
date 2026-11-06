@@ -1,18 +1,7 @@
 [package]
 name = "worker"
-version = "0.1.0"
-edition = "2024"
-
-[profile.dev]
-opt-level = 1
-debug = true
-incremental = true
-
-[profile.release]
-lto = true
-opt-level = "s"
-incremental = false
-codegen-units = 1
+version.workspace = true
+edition.workspace = true
 
 [[bin]]
 name = "worker"
@@ -22,41 +11,26 @@ doctest = false
 bench = false
 
 [dependencies]
-basketball = { path = "../basketball", features = ["defmt"] }
-config = { path = "../config", features = ["defmt"], default-features = false }
-hub75 = { path = "../hub75", features = ["rp235x"] }
-net = { path = "../net", features = ["defmt"] }
+basketball = { workspace = true, features = ["defmt"] }
+config = { workspace = true, features = ["defmt"], default-features = false }
+hub75 = { workspace = true, features = ["rp235x"] }
+net = { workspace = true, features = ["defmt"] }
 
+cortex-m = { workspace = true, features = ["inline-asm"] }
+cortex-m-rt = { workspace = true }
+critical-section = { version = "1.1", features = [] }
+cyw43 = { version = "0.7.0", features = ["defmt", "firmware-logs"] }
+cyw43-pio = { version = "0.10.0", features = ["defmt"] }
+defmt = { workspace = true }
+defmt-rtt = { workspace = true }
 embassy-embedded-hal = { version = "0.6.0", features = ["defmt"] }
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
 embassy-futures = { version = "0.1.2", features = [] }
-embassy-net = { version = "0.9.0", features = ["defmt", "tcp", "udp", "raw", "dhcpv4"] }
+embassy-net = { version = "=0.9.0", features = ["defmt", "tcp", "udp", "raw", "dhcpv4"] }
 embassy-rp = { version = "0.10.0", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"] }
-embassy-sync = { version = "0.8.0" , features = ["defmt"] }
+embassy-sync = { version = "0.8.0", features = ["defmt"] }
 embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime"] }
-
-cyw43 = { version = "0.7.0", features = ["defmt", "firmware-logs"] }
-cyw43-pio = { version = "0.10.0", features = ["defmt"] }
-
-defmt = { version = "1.2.0", features = [] }
-defmt-rtt = { version = "1.0.0", features = [] }
-
-cortex-m = { version = "0.7.6", features = ["inline-asm"] }
-cortex-m-rt =  { version = "0.7.0", features = [] }
-
-critical-section =  { version = "1.1", features = [] }
 embedded-io-async = { version = "0.7.0", features = ["defmt"] }
+heapless = "0.9.3"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 static_cell = { version = "2.1", features = [] }
-heapless = "0.9.3"
-
-[patch.crates-io]
-embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
-embassy-sync = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
-embassy-executor = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
-embassy-time = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
-embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
-embassy-net = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
-embassy-futures = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
-cyw43 = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }
-cyw43-pio = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }

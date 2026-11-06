@@ -1,9 +1,8 @@
 //! Server-to-client wire packet implementation.
 
-use crate::{ServerEvent, layout};
-
 #[cfg(feature = "serde")]
 use crate::packet::serialize_data;
+use crate::{ServerEvent, layout};
 
 const PACKET_MAGIC: u8 = 0x42;
 const PACKET_VERSION: u8 = 0x01;

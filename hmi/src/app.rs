@@ -5,6 +5,15 @@ use core::pin::pin;
 use core::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 
+use crate::adapters::tauri::{invoke_send_device_config, invoke_tauri_window_command};
+use crate::adapters::ws::{
+    BrowserWebSocketAdapter, HmiClientHandler, load_master_address,
+    load_or_create_browser_device, save_master_address,
+};
+use crate::ui::lapapi::{
+    DeviceInspector, MasterServerModal, MatchControlPanel, NavigationSidebar, WifiConfigModal,
+};
+
 use basketball::{Discipline, Game};
 use config::DeviceConfig;
 use futures::channel::mpsc::{self, UnboundedSender};
@@ -16,18 +25,9 @@ use net::{
     Client, ClientEvent, ClientPacket, Device, DeviceType, NetError, ServerEvent, ServerPacket,
     Transport,
 };
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use web_sys::{BinaryType, MessageEvent, WebSocket};
-
-use crate::adapters::tauri::{invoke_send_device_config, invoke_tauri_window_command};
-use crate::adapters::ws::{
-    load_master_address, load_or_create_browser_device, save_master_address,
-    BrowserWebSocketAdapter, LapapiClientHandler,
-};
-use crate::ui::lapapi::{
-    LapapiCenterView, LapapiInspector, LapapiSidebar, MasterServerModal, WifiConfigModal,
-};
 
 /// Root Lapapi macOS component written in clean Leptos architecture.
 #[component]
@@ -394,7 +394,7 @@ pub fn App() -> impl IntoView {
             {
                 let adapter = BrowserWebSocketAdapter::new(outgoing_tx, incoming_rx);
                 let transport = Transport::new(adapter, None);
-                let handler = LapapiClientHandler::new(packet_tx);
+                let handler = HmiClientHandler::new(packet_tx);
                 let mut client = Client::new(transport, handler);
 
                 wasm_bindgen_futures::spawn_local(async move {
@@ -645,7 +645,7 @@ pub fn App() -> impl IntoView {
             style=move || format!("zoom: {};", zoom_level.get())
         >
             // Tree-based Sidebar (Games and Devices)
-            <LapapiSidebar
+            <NavigationSidebar
                 is_focused=is_focused.into()
                 is_lights_hovered=is_lights_hovered
                 on_start_drag=on_start_drag
@@ -668,7 +668,7 @@ pub fn App() -> impl IntoView {
             />
 
             // Center Scoreboard and WebSocket Control View
-            <LapapiCenterView
+            <MatchControlPanel
                 game=current_game.into()
                 is_connected=is_connected.into()
                 on_start_drag=on_start_drag
@@ -681,7 +681,7 @@ pub fn App() -> impl IntoView {
             />
 
             // Right Inspector & Logs Panel
-            <LapapiInspector
+            <DeviceInspector
                 selected_game=current_game.into()
                 selected_device=selected_device
                 logs=logs.into()

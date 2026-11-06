@@ -3,14 +3,14 @@
 use core::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::adapters::net::Session;
+use crate::services::Services;
+
 use basketball::{Discipline, Game, Score, Team};
 use config::DeviceConfig;
 use net::{
     ClientEvent, ClientPacket, Device, DeviceType, ServerEvent, ServerHandler, ServerPacket,
 };
-
-use crate::adapters::net::Session;
-use crate::services::Services;
 
 /// Stateful per-connection packet handler for the master server.
 pub struct MasterServerHandler {

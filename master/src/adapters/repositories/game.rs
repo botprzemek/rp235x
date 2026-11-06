@@ -1,9 +1,9 @@
 //! ReDB-backed repository for [`Game`] records.
 
-use basketball::Game;
-
 use crate::adapters::data::{GAME_TABLE, ReDBProvider};
 use crate::adapters::repositories::Repository;
+
+use basketball::Game;
 
 /// Persistence adapter for [`Game`] records in ReDB.
 #[derive(Clone)]

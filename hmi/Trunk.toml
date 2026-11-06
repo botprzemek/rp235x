@@ -2,7 +2,8 @@
 target = "./index.html"
 
 [watch]
-ignore = ["./hmi-tauri"]
+watch = ["./src", "./index.html"]
+ignore = ["./hmi-tauri", "./target", "./dist"]
 
 [serve]
 port = 1420

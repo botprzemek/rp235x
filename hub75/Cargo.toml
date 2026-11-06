@@ -1,13 +1,13 @@
 [package]
 name = "hub75"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-cortex-m = { version = "0.7.6", features = [], optional = true }
-cortex-m-rt =  { version = "0.7.0", features = [], optional = true }
-defmt = { version = "1.2.0", features = [], optional = true }
-defmt-rtt = { version = "1.0.0", features = [], optional = true }
+cortex-m = { workspace = true, optional = true }
+cortex-m-rt = { workspace = true, optional = true }
+defmt = { workspace = true, optional = true }
+defmt-rtt = { workspace = true, optional = true }
 embassy-rp = { version = "0.10.0", features = [], optional = true }
 
 [features]
@@ -20,6 +20,3 @@ rp235x = [
     "dep:embassy-rp",
     "embassy-rp/rp235xa",
 ]
-
-[patch.crates-io]
-embassy-rp = { git = "https://github.com/embassy-rs/embassy.git", rev = "b720605" }

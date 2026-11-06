@@ -5,14 +5,14 @@ use std::eprintln;
 #[cfg(feature = "std")]
 use std::time::Duration;
 
-#[cfg(feature = "std")]
-use probe_rs::Permissions;
+use crate::{CONFIG_ADDR, CONFIG_SIZE, Config, ConfigError, Raw};
+
 #[cfg(feature = "std")]
 use probe_rs::flashing::DownloadOptions;
 #[cfg(feature = "std")]
+use probe_rs::Permissions;
+#[cfg(feature = "std")]
 use probe_rs::probe::list::Lister;
-
-use crate::{CONFIG_ADDR, CONFIG_SIZE, Config, ConfigError, Raw};
 
 /// Reads a [`Config`] from target flash memory.
 pub trait FlashReader<'flash> {

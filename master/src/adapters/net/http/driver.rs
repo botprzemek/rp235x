@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
+use crate::adapters::net::http::{GameHandler, WebsocketHandler};
+use crate::services::Services;
+
 use axum::Router;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
-
-use crate::adapters::net::http::{GameHandler, WebsocketHandler};
-use crate::services::Services;
 
 /// Axum HTTP server driver.
 pub struct WebDriver {

@@ -40,7 +40,7 @@ pub struct Input {
 
 /// Fixed-capacity null-terminated UTF-8 field inside [`Config`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConfigField<const N: usize>([u8; N]);
+pub(crate) struct ConfigField<const N: usize>([u8; N]);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SerialNumber(ConfigField<32>);
@@ -59,7 +59,7 @@ struct Checksum(u32);
 
 /// Typestate marker for an unverified [`Config`] loaded from raw memory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Raw;
+pub(crate) struct Raw;
 
 /// Typestate marker for a [`Config`] whose checksum integrity has been verified.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -192,7 +192,7 @@ impl<const N: usize> Default for ConfigField<N> {
 impl<const N: usize> ConfigField<N> {
     /// Creates a zero-initialized [`ConfigField`].
     #[must_use]
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self([0; N])
     }
 
@@ -227,7 +227,7 @@ impl<const N: usize> ConfigField<N> {
 
 impl<State> Config<State> {
     /// Creates a new [`Config`] from the provided credentials and computes its checksum.
-    pub fn try_new(
+    pub(crate) fn try_new(
         serial_number: &str,
         device_id: &str,
         wifi_ssid: &str,
@@ -304,7 +304,7 @@ impl<State> Config<State> {
 
     /// Verifies that the stored checksum matches the calculated checksum of the fields.
     #[must_use]
-    pub fn verify_integrity(&self) -> bool {
+    pub(crate) fn verify_integrity(&self) -> bool {
         let slice_len = CONFIG_SIZE - mem::size_of::<u32>();
         let pointer = (self as *const Self).cast::<u8>();
         // SAFETY: `pointer` points to a valid `Self` instance and `slice_len` covers the initialized
@@ -337,7 +337,7 @@ impl<State> Config<State> {
 
 impl Config<Raw> {
     /// Reinterprets a properly aligned byte slice of at least [`CONFIG_SIZE`] bytes as a [`Config<Raw>`].
-    pub fn from_bytes(bytes: &[u8]) -> Result<&Self, ConfigError> {
+    pub(crate) fn from_bytes(bytes: &[u8]) -> Result<&Self, ConfigError> {
         if bytes.len() < CONFIG_SIZE {
             return Err(ConfigError::Serialization);
         }
@@ -356,7 +356,7 @@ impl Config<Raw> {
     }
 
     /// Verifies checksum integrity and transitions the reference from [`Raw`] to [`Verified`].
-    pub fn verify(&self) -> Result<&Config<Verified>, ConfigError> {
+    pub(crate) fn verify(&self) -> Result<&Config<Verified>, ConfigError> {
         if !self.verify_integrity() {
             return Err(ConfigError::IntegrityCheckFailed);
         }

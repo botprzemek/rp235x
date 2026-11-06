@@ -1,6 +1,8 @@
 //! BCM frame scanning and shift-register clocking for [`LedOutputs`].
 
-use crate::{BitplaneBuffer, LedOutputs, OutputPin, PinLevel};
+use crate::LedOutputs;
+use crate::bitplane::BitplaneBuffer;
+use crate::output::{OutputPin, PinLevel};
 
 impl<P: OutputPin> LedOutputs<P> {
     /// Selects the active scan row address (`0..16`) on the HUB75 address lines.

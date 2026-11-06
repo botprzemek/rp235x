@@ -1,8 +1,9 @@
 //! WebSocket connection adapter and browser device identity management.
 
 use core::net::SocketAddr;
-use futures::StreamExt;
+
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures::StreamExt;
 use net::layout::PACKET_SIZE;
 use net::{ClientHandler, ClientPacket, Device, DeviceType, RawConnection, ServerPacket};
 
@@ -90,18 +91,18 @@ impl RawConnection for BrowserWebSocketAdapter {
 }
 
 /// [`ClientHandler`] implementation that forwards received [`ServerPacket`]s to a channel.
-pub struct LapapiClientHandler {
+pub struct HmiClientHandler {
     packet_tx: UnboundedSender<ServerPacket>,
 }
 
-impl LapapiClientHandler {
+impl HmiClientHandler {
     #[must_use]
     pub fn new(packet_tx: UnboundedSender<ServerPacket>) -> Self {
         Self { packet_tx }
     }
 }
 
-impl ClientHandler for LapapiClientHandler {
+impl ClientHandler for HmiClientHandler {
     async fn handle_packet(
         &mut self,
         packet: ServerPacket,
@@ -111,3 +112,5 @@ impl ClientHandler for LapapiClientHandler {
         None
     }
 }
+
+pub use HmiClientHandler as LapapiClientHandler;

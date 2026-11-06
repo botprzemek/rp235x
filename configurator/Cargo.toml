@@ -1,12 +1,12 @@
 [package]
 name = "configurator"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-config = { path = "../config", features = ["std", "serde"] }
+config = { workspace = true, features = ["std", "serde"] }
 
 clap = { version = "4.4", features = ["derive"] }
 
 [dev-dependencies]
-tempfile = { version = "3.27.0" }
+tempfile = { workspace = true }

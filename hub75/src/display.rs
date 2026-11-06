@@ -5,7 +5,7 @@ use crate::color::Color;
 use crate::font;
 
 /// 8-bit gamma correction lookup table for LED perceptual linearity.
-pub static GAMMA_TABLE: [u8; 256] = [
+pub(crate) static GAMMA_TABLE: [u8; 256] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7,
     8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18,
@@ -22,9 +22,9 @@ pub static GAMMA_TABLE: [u8; 256] = [
 /// RGB framebuffer paired with a [`BitplaneBuffer`] and global brightness setting.
 #[non_exhaustive]
 pub struct DisplayBuffer<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize> {
-    pub frame_buffer: [[Color; WIDTH]; HEIGHT],
-    pub bitplanes: BitplaneBuffer<WIDTH, HALF_HEIGHT>,
-    pub brightness_percent: u8,
+    pub(crate) frame_buffer: [[Color; WIDTH]; HEIGHT],
+    pub(crate) bitplanes: BitplaneBuffer<WIDTH, HALF_HEIGHT>,
+    pub(crate) brightness_percent: u8,
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize> Default

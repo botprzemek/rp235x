@@ -1,5 +1,12 @@
 //! Inherent state handlers on [`Machine`] and the UDP client task.
 
+use crate::core0::cyw43::{Cyw43, cyw43_task};
+use crate::core0::dhcp::run_dhcp_server;
+use crate::core0::net::{Net, net_task};
+use crate::core0::udp_handler::unified_udp_task;
+use crate::peripherals::{NetPeripherals, TrngPeripherals};
+use crate::state::{Input, Machine};
+
 use config::Config;
 use config::flash::FlashReader;
 use config::print::Print;
@@ -10,13 +17,6 @@ use embassy_rp::peripherals::{FLASH, WATCHDOG};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::signal::Signal;
 use embassy_time::Timer;
-
-use crate::core0::cyw43::{Cyw43, cyw43_task};
-use crate::core0::dhcp::run_dhcp_server;
-use crate::core0::net::{Net, net_task};
-use crate::core0::udp_handler::unified_udp_task;
-use crate::peripherals::{NetPeripherals, TrngPeripherals};
-use crate::state::{Input, Machine};
 
 /// Signal emitted by Core 1 once its HUB75 display task has been spawned.
 pub static CORE1_READY_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();

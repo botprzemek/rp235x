@@ -97,7 +97,8 @@ fn set_island_mode(app: AppHandle, island: bool) {
 #[tauri::command]
 async fn discover_master(timeout_secs: Option<u64>) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
-        let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| format!("Błąd bind socketu: {}", e))?;
+        let socket =
+            UdpSocket::bind("0.0.0.0:0").map_err(|e| format!("Błąd bind socketu: {}", e))?;
         let _ = socket.set_broadcast(true);
         let _ = socket.set_read_timeout(Some(Duration::from_millis(400)));
 
@@ -149,13 +150,9 @@ fn send_device_config(
     wifi_ssid: String,
     wifi_password: String,
 ) -> Result<String, String> {
-    let packet = DeviceConfigPacket::try_new(
-        &serial_number,
-        &device_id,
-        &wifi_ssid,
-        &wifi_password,
-    )
-    .map_err(|e| format!("Błąd parametrów: {:?}", e))?;
+    let packet =
+        DeviceConfigPacket::try_new(&serial_number, &device_id, &wifi_ssid, &wifi_password)
+            .map_err(|e| format!("Błąd parametrów: {:?}", e))?;
 
     let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
     socket
@@ -182,7 +179,8 @@ fn send_device_config(
         return Err("Niepoprawny rozmiar odpowiedzi".to_string());
     }
 
-    let server_packet = ServerPacket::from_bytes(buf).map_err(|e| format!("Błąd pakietu: {}", e))?;
+    let server_packet =
+        ServerPacket::from_bytes(buf).map_err(|e| format!("Błąd pakietu: {}", e))?;
 
     match server_packet.event() {
         ServerEvent::DeviceConfigAck => {
@@ -192,7 +190,10 @@ fn send_device_config(
                 if n2 == PACKET_SIZE {
                     if let Ok(p2) = ServerPacket::from_bytes(buf) {
                         if p2.event() == ServerEvent::DeviceConfigSuccess {
-                            return Ok("Sukces! Urządzenie zaktualizowało pamięć flash i restartuje się.".to_string());
+                            return Ok(
+                                "Sukces! Urządzenie zaktualizowało pamięć flash i restartuje się."
+                                    .to_string(),
+                            );
                         }
                     }
                 }
@@ -202,7 +203,10 @@ fn send_device_config(
         ServerEvent::DeviceConfigSuccess => {
             Ok("Sukces! Urządzenie zaktualizowało pamięć flash i restartuje się.".to_string())
         }
-        other => Err(format!("Nieoczekiwana odpowiedź od urządzenia: {:?}", other)),
+        other => Err(format!(
+            "Nieoczekiwana odpowiedź od urządzenia: {:?}",
+            other
+        )),
     }
 }
 
@@ -215,7 +219,9 @@ pub fn run() {
                 apply_macos_vibrancy(&window);
                 if let Some(icon) = app.default_window_icon() {
                     let _ = window.set_icon(icon.clone());
-                } else if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png")) {
+                } else if let Ok(icon) =
+                    tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))
+                {
                     let _ = window.set_icon(icon);
                 }
             }
@@ -232,7 +238,11 @@ pub fn run() {
                 .build()?;
 
             let file_submenu = SubmenuBuilder::new(app, "Plik")
-                .item(&MenuItemBuilder::with_id("new_game", "Nowa gra").accelerator("CmdOrCtrl+N").build(app)?)
+                .item(
+                    &MenuItemBuilder::with_id("new_game", "Nowa gra")
+                        .accelerator("CmdOrCtrl+N")
+                        .build(app)?,
+                )
                 .separator()
                 .close_window()
                 .build()?;
@@ -248,9 +258,21 @@ pub fn run() {
                 .build()?;
 
             let view_submenu = SubmenuBuilder::new(app, "Widok")
-                .item(&MenuItemBuilder::with_id("zoom_in", "Przybliż (Zoom In)").accelerator("CmdOrCtrl+=").build(app)?)
-                .item(&MenuItemBuilder::with_id("zoom_out", "Oddal (Zoom Out)").accelerator("CmdOrCtrl+-").build(app)?)
-                .item(&MenuItemBuilder::with_id("zoom_reset", "Rzeczywisty rozmiar (100%)").accelerator("CmdOrCtrl+0").build(app)?)
+                .item(
+                    &MenuItemBuilder::with_id("zoom_in", "Przybliż (Zoom In)")
+                        .accelerator("CmdOrCtrl+=")
+                        .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id("zoom_out", "Oddal (Zoom Out)")
+                        .accelerator("CmdOrCtrl+-")
+                        .build(app)?,
+                )
+                .item(
+                    &MenuItemBuilder::with_id("zoom_reset", "Rzeczywisty rozmiar (100%)")
+                        .accelerator("CmdOrCtrl+0")
+                        .build(app)?,
+                )
                 .separator()
                 .fullscreen()
                 .build()?;
@@ -262,7 +284,13 @@ pub fn run() {
                 .build()?;
 
             let menu = MenuBuilder::new(app)
-                .items(&[&app_submenu, &file_submenu, &edit_submenu, &view_submenu, &window_submenu])
+                .items(&[
+                    &app_submenu,
+                    &file_submenu,
+                    &edit_submenu,
+                    &view_submenu,
+                    &window_submenu,
+                ])
                 .build()?;
 
             app.set_menu(menu)?;

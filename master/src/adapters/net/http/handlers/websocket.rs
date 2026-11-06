@@ -2,6 +2,9 @@
 
 use std::sync::Arc;
 
+use crate::adapters::net::connection;
+use crate::services::Services;
+
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -11,9 +14,6 @@ use futures::SinkExt;
 use futures::stream::{SplitSink, SplitStream, StreamExt};
 use net::layout::PACKET_SIZE;
 use net::{PacketReceiver, PacketSender, RawPacket};
-
-use crate::adapters::net::connection;
-use crate::services::Services;
 
 /// Outbound half of a WebSocket connection.
 pub struct WebSocketSender {

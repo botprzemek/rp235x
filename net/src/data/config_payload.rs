@@ -1,23 +1,24 @@
 //! Device configuration payload for over-the-air Wi-Fi network setup over UDP.
 
 use core::str;
+
 use config::ConfigError;
 
 /// Layout offsets for [`DeviceConfigPayload`].
-pub mod layout {
-    pub const SERIAL_NUMBER_SIZE: usize = 12;
-    pub const DEVICE_ID_SIZE: usize = 12;
-    pub const WIFI_SSID_SIZE: usize = 16;
-    pub const WIFI_PASSWORD_SIZE: usize = 19;
+pub(crate) mod layout {
+    pub(crate) const SERIAL_NUMBER_SIZE: usize = 12;
+    pub(crate) const DEVICE_ID_SIZE: usize = 12;
+    pub(crate) const WIFI_SSID_SIZE: usize = 16;
+    pub(crate) const WIFI_PASSWORD_SIZE: usize = 19;
 
-    pub const SERIAL_NUMBER_START: usize = 0;
-    pub const SERIAL_NUMBER_END: usize = 12;
-    pub const DEVICE_ID_START: usize = 12;
-    pub const DEVICE_ID_END: usize = 24;
-    pub const WIFI_SSID_START: usize = 24;
-    pub const WIFI_SSID_END: usize = 40;
-    pub const WIFI_PASSWORD_START: usize = 40;
-    pub const WIFI_PASSWORD_END: usize = 59;
+    pub(crate) const SERIAL_NUMBER_START: usize = 0;
+    pub(crate) const SERIAL_NUMBER_END: usize = 12;
+    pub(crate) const DEVICE_ID_START: usize = 12;
+    pub(crate) const DEVICE_ID_END: usize = 24;
+    pub(crate) const WIFI_SSID_START: usize = 24;
+    pub(crate) const WIFI_SSID_END: usize = 40;
+    pub(crate) const WIFI_PASSWORD_START: usize = 40;
+    pub(crate) const WIFI_PASSWORD_END: usize = 59;
 }
 
 /// 59-byte payload structure mapping exactly to [`crate::layout::DATA_SIZE`].

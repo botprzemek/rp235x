@@ -7,22 +7,22 @@ pub const DATA_SIZE: usize = 59;
 pub const PACKET_SIZE: usize = 64;
 
 /// Byte index of the magic header byte.
-pub const MAGIC: usize = 0x00;
+pub(crate) const MAGIC: usize = 0x00;
 
 /// Byte index of the event identifier byte.
-pub const EVENT: usize = 0x01;
+pub(crate) const EVENT: usize = 0x01;
 
 /// Byte index of the packet sequence number.
-pub const SEQUENCE_ID: usize = 0x02;
+pub(crate) const SEQUENCE_ID: usize = 0x02;
 
 /// Byte index of the protocol version byte.
-pub const VERSION: usize = 0x03;
+pub(crate) const VERSION: usize = 0x03;
 
 /// Start byte index (inclusive) of the packet payload.
-pub const DATA_START: usize = 0x04;
+pub(crate) const DATA_START: usize = 0x04;
 
 /// End byte index (exclusive) of the packet payload.
-pub const DATA_END: usize = 0x3f;
+pub(crate) const DATA_END: usize = 0x3f;
 
 /// Byte index of the XOR CRC byte.
-pub const CRC: usize = 0x3f;
+pub(crate) const CRC: usize = 0x3f;

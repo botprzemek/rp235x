@@ -1,8 +1,11 @@
 //! UDP server driver for communicating with RP235x hardware workers.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
+
+use crate::services::{Observable, Services};
 
 use basketball::{Discipline, Game};
 use config::DeviceConfig;
@@ -12,17 +15,16 @@ use tokio::net::UdpSocket;
 use tokio::sync::watch;
 use tokio::time::{self, MissedTickBehavior};
 
-use crate::services::{Observable, Services};
-
-const FRAME_DURATION: Duration = Duration::from_nanos(1_000_000_000 / 60); // 60 Hz (60 updates/s)
+const SYNC_HEARTBEAT_DURATION: Duration = Duration::from_millis(100); // 10 Hz periodic sync (event-driven broadcast handles immediate updates)
 
 #[derive(Clone)]
 struct ActiveWorker {
     address: SocketAddr,
     serial_number: String,
+    session_token: u32,
 }
 
-/// UDP transport driver streaming 60 Hz game updates to RP235x workers.
+/// UDP transport driver streaming periodic and event-driven game updates to RP235x workers.
 pub struct WorkerDriver {
     listener: Arc<UdpSocket>,
 }
@@ -44,7 +46,7 @@ impl WorkerDriver {
     }
 
     async fn run(self, services: Arc<Services>) {
-        let (worker_tx, worker_rx) = watch::channel(None);
+        let (worker_tx, worker_rx) = watch::channel(HashMap::<String, ActiveWorker>::new());
 
         let receive_socket = Arc::clone(&self.listener);
         let receive_services = Arc::clone(&services);
@@ -62,7 +64,7 @@ impl WorkerDriver {
     async fn handle_incoming(
         socket: Arc<UdpSocket>,
         services: Arc<Services>,
-        worker_tx: watch::Sender<Option<ActiveWorker>>,
+        worker_tx: watch::Sender<HashMap<String, ActiveWorker>>,
     ) {
         let mut sequence_id: u8 = 0;
         let mut receive_buffer = [0u8; PACKET_SIZE];
@@ -71,13 +73,14 @@ impl WorkerDriver {
         loop {
             tokio::select! {
                 Ok(target_serial_number) = disconnect_rx.recv() => {
-                    let should_clear = worker_tx
-                        .borrow()
-                        .as_ref()
-                        .is_some_and(|worker| worker.serial_number == target_serial_number);
-                    if should_clear {
+                    let mut removed = false;
+                    worker_tx.send_modify(|workers| {
+                        if workers.remove(&target_serial_number).is_some() {
+                            removed = true;
+                        }
+                    });
+                    if removed {
                         println!("INFO: [UDP] Forcefully disconnected worker sn={target_serial_number}");
-                        let _ = worker_tx.send(None);
                     }
                 }
 
@@ -110,12 +113,15 @@ impl WorkerDriver {
                             }
                         };
 
-                        let serial_number = device.serial_number().unwrap_or("unknown").to_string();
-                        let assigned_game_id = services
-                            .devices()
-                            .game_id_by_serial(&serial_number)
-                            .unwrap_or(0);
+                        let assigned_game_id = match device.serial_number() {
+                            Ok(serial) => services.devices().game_id_by_serial(serial).unwrap_or(0),
+                            Err(_) => continue,
+                        };
                         device.set_game_id(assigned_game_id);
+
+                        let Ok(serial_ref) = device.serial_number() else {
+                            continue;
+                        };
 
                         if let Err(error) = services.devices().validate_and_register(device) {
                             eprintln!(
@@ -124,26 +130,52 @@ impl WorkerDriver {
                             continue;
                         }
 
-                        println!(
-                            "INFO: [UDP {remote_address}] Validated device {:?} (id={}, sn={serial_number}, game_id={})",
-                            device.device_type(),
-                            device.device_id().unwrap_or("unknown"),
-                            device.game_id(),
-                        );
+                        // Check if this worker is already known with the same address
+                        let (session_token, is_new_or_moved) = {
+                            let workers_guard = worker_tx.borrow();
+                            match workers_guard.get(serial_ref) {
+                                Some(existing) => (existing.session_token, existing.address != remote_address),
+                                None => {
+                                    let new_token = (SystemTime::now()
+                                        .duration_since(SystemTime::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_nanos() as u32)
+                                        | 0x8000_0000;
+                                    (new_token, true)
+                                }
+                            }
+                        };
 
-                        let _ = worker_tx.send(Some(ActiveWorker {
-                            address: remote_address,
-                            serial_number,
-                        }));
+                        if is_new_or_moved {
+                            println!(
+                                "INFO: [UDP {remote_address}] Connected worker {:?} (id={}, sn={serial_ref}, game_id={})",
+                                device.device_type(),
+                                device.device_id().unwrap_or("unknown"),
+                                device.game_id(),
+                            );
+
+                            let serial_string = serial_ref.to_string();
+                            worker_tx.send_modify(|workers| {
+                                workers.insert(
+                                    serial_string.clone(),
+                                    ActiveWorker {
+                                        address: remote_address,
+                                        serial_number: serial_string,
+                                        session_token,
+                                    },
+                                );
+                            });
+                        }
 
                         sequence_id = sequence_id.wrapping_add(1);
 
-                        let current_game = if assigned_game_id != 0 {
+                        let mut current_game = if assigned_game_id != 0 {
                             services.game().by_id(assigned_game_id)
                         } else {
                             None
                         }
                         .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5vs5));
+                        current_game.set_session_token(session_token);
 
                         let ack_packet = ServerPacket::new(
                             ServerEvent::HandshakeAck,
@@ -160,27 +192,28 @@ impl WorkerDriver {
     async fn handle_ticks(
         socket: Arc<UdpSocket>,
         services: Arc<Services>,
-        worker_rx: watch::Receiver<Option<ActiveWorker>>,
+        worker_rx: watch::Receiver<HashMap<String, ActiveWorker>>,
     ) {
-        let mut interval = time::interval(FRAME_DURATION);
+        let mut interval = time::interval(SYNC_HEARTBEAT_DURATION);
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut sequence_id: u8 = 0;
         let mut broadcast_rx = services.game().subscribe();
         let mut game_assign_rx = services.devices().subscribe_game_assign();
 
         loop {
-            let active_worker = worker_rx.borrow().clone();
+            let active_workers = worker_rx.borrow().clone();
 
             tokio::select! {
                 _ = interval.tick() => {
-                    if let Some(ref worker) = active_worker {
+                    for worker in active_workers.values() {
                         let assigned_game_id = services
                             .devices()
                             .game_id_by_serial(&worker.serial_number)
                             .unwrap_or(0);
                         if assigned_game_id != 0
-                            && let Some(current_game) = services.game().by_id(assigned_game_id)
+                            && let Some(mut current_game) = services.game().by_id(assigned_game_id)
                         {
+                            current_game.set_session_token(worker.session_token);
                             sequence_id = sequence_id.wrapping_add(1);
                             let packet = ServerPacket::new(
                                 ServerEvent::GameUpdate,
@@ -193,15 +226,14 @@ impl WorkerDriver {
                 }
 
                 Ok(assignment) = game_assign_rx.recv() => {
-                    if let Some(ref worker) = active_worker
-                        && worker.serial_number == assignment.serial_number
-                    {
-                        let game = if assignment.game_id != 0 {
+                    if let Some(worker) = active_workers.get(&assignment.serial_number) {
+                        let mut game = if assignment.game_id != 0 {
                             services.game().by_id(assignment.game_id)
                         } else {
                             None
                         }
                         .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5vs5));
+                        game.set_session_token(worker.session_token);
 
                         sequence_id = sequence_id.wrapping_add(1);
                         let packet = ServerPacket::new(
@@ -214,23 +246,24 @@ impl WorkerDriver {
                 }
 
                 result = broadcast_rx.recv() => {
-                    if let Ok(games) = result
-                        && let Some(ref worker) = active_worker
-                    {
-                        let assigned_game_id = services
-                            .devices()
-                            .game_id_by_serial(&worker.serial_number)
-                            .unwrap_or(0);
-                        if assigned_game_id != 0
-                            && let Some(game) = games.iter().find(|entry| entry.id() == assigned_game_id)
-                        {
-                            sequence_id = sequence_id.wrapping_add(1);
-                            let packet = ServerPacket::new(
-                                ServerEvent::GameUpdate,
-                                sequence_id,
-                                game.to_bytes(),
-                            );
-                            let _ = socket.send_to(&packet.to_bytes(), worker.address).await;
+                    if let Ok(games) = result {
+                        for worker in active_workers.values() {
+                            let assigned_game_id = services
+                                .devices()
+                                .game_id_by_serial(&worker.serial_number)
+                                .unwrap_or(0);
+                            if assigned_game_id != 0
+                                && let Some(mut game) = games.iter().find(|entry| entry.id() == assigned_game_id).copied()
+                            {
+                                game.set_session_token(worker.session_token);
+                                sequence_id = sequence_id.wrapping_add(1);
+                                let packet = ServerPacket::new(
+                                    ServerEvent::GameUpdate,
+                                    sequence_id,
+                                    game.to_bytes(),
+                                );
+                                let _ = socket.send_to(&packet.to_bytes(), worker.address).await;
+                            }
                         }
                     }
                 }

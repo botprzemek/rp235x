@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use clap::Args;
 use config::ConfigError;
-use config::probe_rs::Permissions;
 use config::probe_rs::flashing::{
     BinLoader, BinOptions, DownloadOptions, ElfLoader, ElfOptions, HexLoader, ImageLoader,
     Uf2Loader,
 };
+use config::probe_rs::Permissions;
 use config::probe_rs::probe::list::Lister;
 
 /// Arguments for the `flash` subcommand.

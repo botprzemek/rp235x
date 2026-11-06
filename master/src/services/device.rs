@@ -4,14 +4,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::adapters::repositories::{DeviceRepository, Repository};
+use crate::services::Observable;
+
 use config::{ConfigError, DeviceConfig};
 use net::{Device, DeviceType};
 use tokio::sync::{broadcast, watch};
 use tokio::task;
 use tokio::time::{self, MissedTickBehavior};
-
-use crate::adapters::repositories::{DeviceRepository, Repository};
-use crate::services::Observable;
 
 /// Notification emitted when a device is assigned to a game.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,14 +166,20 @@ impl DeviceService {
             return Err(ConfigError::Serialization);
         }
 
-        self.state.send_modify(|devices| {
+        self.state.send_if_modified(|devices| {
             if let Some(existing) = devices
                 .iter_mut()
                 .find(|entry| entry.serial_number() == Ok(serial_number))
             {
-                *existing = device;
+                if *existing != device {
+                    *existing = device;
+                    true
+                } else {
+                    false
+                }
             } else {
                 devices.push(device);
+                true
             }
         });
 

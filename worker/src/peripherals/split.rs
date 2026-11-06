@@ -1,10 +1,10 @@
 //! Partitioning of RP235x hardware peripherals into functional groups.
 
+use crate::peripherals::{NetPeripherals, TrngPeripherals};
+
 use embassy_rp::peripherals::{CORE1, FLASH, WATCHDOG};
 use embassy_rp::{Peri, Peripherals};
 use hub75::LedPeripherals;
-
-use crate::peripherals::{NetPeripherals, TrngPeripherals};
 
 /// Partitioned hardware peripherals for Core 0 and Core 1.
 pub struct BoardPeripherals {

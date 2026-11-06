@@ -1,9 +1,9 @@
 //! RP235x GPIO peripheral bindings for [`LedOutputs`].
 
+use crate::{LedOutputs, OutputPin};
+
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::{Peri, peripherals};
-
-use crate::{LedOutputs, OutputPin};
 
 /// RP235x GPIO pins assigned to the HUB75 panel interface.
 #[non_exhaustive]

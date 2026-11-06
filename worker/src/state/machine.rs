@@ -3,10 +3,49 @@
 use core::cell::RefCell;
 
 use basketball::Game;
+use critical_section::Mutex as CsMutex;
 use defmt::Format;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
+
+/// Lock-free, non-blocking synchronized Game state container between Core 0 and Core 1.
+pub struct SharedGameState {
+    state: CsMutex<RefCell<Game>>,
+}
+
+impl SharedGameState {
+    /// Creates a new [`SharedGameState`] containing an empty initial game.
+    pub const fn new() -> Self {
+        Self {
+            state: CsMutex::new(RefCell::new(Game::empty())),
+        }
+    }
+
+    /// Instant, non-blocking snapshot read for Core 1 (zero awaits, zero display jitter).
+    #[inline]
+    pub fn get(&self) -> Game {
+        critical_section::with(|cs| *self.state.borrow(cs).borrow())
+    }
+
+    /// Instant, non-blocking atomic update for Core 0.
+    #[inline]
+    pub fn set(&self, game: Game) {
+        critical_section::with(|cs| {
+            *self.state.borrow(cs).borrow_mut() = game;
+        });
+    }
+
+    /// Mutates the game state safely under a fast critical section.
+    #[inline]
+    #[allow(dead_code)]
+    pub fn update<F: FnOnce(&mut Game)>(&self, f: F) {
+        critical_section::with(|cs| {
+            f(&mut *self.state.borrow(cs).borrow_mut());
+        });
+    }
+}
+
+unsafe impl Sync for SharedGameState {}
 
 /// State transition events for [`Machine`].
 #[repr(u8)]
@@ -43,8 +82,7 @@ pub struct Machine {
 pub static STATE_SIGNAL: Signal<CriticalSectionRawMutex, State> = Signal::new();
 
 /// Shared [`Game`] state updated by Core 0 UDP networking and rendered by Core 1.
-pub static GAME_STATE: Mutex<CriticalSectionRawMutex, RefCell<Game>> =
-    Mutex::new(RefCell::new(Game::empty()));
+pub static GAME_STATE: SharedGameState = SharedGameState::new();
 
 impl Default for Machine {
     fn default() -> Self {

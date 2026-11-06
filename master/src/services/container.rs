@@ -1,9 +1,9 @@
 //! [`Services`] container and [`Observable`] state subscription trait.
 
-use tokio::sync::{broadcast, watch};
-
 use crate::adapters::repositories::Registry;
 use crate::services::{DeviceService, GameService};
+
+use tokio::sync::{broadcast, watch};
 
 /// Container holding the application's [`GameService`] and [`DeviceService`].
 #[derive(Clone)]

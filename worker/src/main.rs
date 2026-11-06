@@ -11,12 +11,12 @@ mod state;
 
 use core::ptr;
 
+use crate::core0::Core0;
+use crate::core1::Core1;
+
 use defmt_rtt as _;
 use embassy_rp::multicore::{self, Stack};
 use panic_probe as _;
-
-use crate::core0::Core0;
-use crate::core1::Core1;
 
 /// Execution stack allocated for Core 1.
 pub static mut CORE1_STACK: Stack<16384> = Stack::new();

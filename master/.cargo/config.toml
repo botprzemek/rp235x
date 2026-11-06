@@ -1,2 +1,6 @@
+[build]
+target = "aarch64-unknown-linux-gnu"
+
 [target.aarch64-unknown-linux-gnu]
+runner = ["bash", "-c", 'ssh orangepi-flasher "systemctl --user stop master && cat > ~/.local/bin/master && chmod +x ~/.local/bin/master && systemctl --user start master" < "$0"']
 linker = "aarch64-linux-gnu-gcc"

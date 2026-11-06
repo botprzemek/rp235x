@@ -1,8 +1,8 @@
 //! In-Application Programming (IAP) flash writer for RP2350.
 
 use config::{CONFIG_ADDR, Config, Verified};
-use embassy_rp::Peri;
 use embassy_rp::flash::{Blocking, Flash};
+use embassy_rp::Peri;
 use embassy_rp::peripherals::FLASH;
 
 /// Flash base address for RP2350 XIP.

@@ -17,9 +17,10 @@ pub mod keys;
 #[cfg(feature = "std")]
 pub use config::Input;
 pub use config::{
-    CONFIG_ADDR, CONFIG_SIZE, Config, ConfigBuilder, ConfigError, ConfigField, DeviceConfig,
-    NetworkConfig, Raw, Verified,
+    CONFIG_ADDR, CONFIG_SIZE, Config, ConfigBuilder, ConfigError, DeviceConfig, NetworkConfig,
+    Verified,
 };
+pub(crate) use config::Raw;
 #[cfg(feature = "serde")]
 pub use file::JsonReader;
 #[cfg(feature = "std")]

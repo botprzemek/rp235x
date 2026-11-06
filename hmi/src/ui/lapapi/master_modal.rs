@@ -1,10 +1,10 @@
 //! Native macOS modal sheet for configuring Master server address in Leptos,
 //! with automatic UDP network discovery, loading state, and manual fallback on timeout.
 
+use crate::adapters::tauri::invoke_discover_master;
+
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-
-use crate::adapters::tauri::invoke_discover_master;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DiscoveryState {

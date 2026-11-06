@@ -5,15 +5,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
+use crate::adapters::repositories::{GameRepository, Repository};
+use crate::services::Observable;
+
 use basketball::{Discipline, Game, Scorable, Score, Scores, State, Team};
 use net::layout::PACKET_SIZE;
 use net::{ServerEvent, ServerPacket};
 use tokio::sync::{broadcast, watch};
 use tokio::task;
 use tokio::time::{self, MissedTickBehavior};
-
-use crate::adapters::repositories::{GameRepository, Repository};
-use crate::services::Observable;
 
 const TICK_RATE: Duration = Duration::from_nanos(1_000_000_000 / 60);
 /// How often (in ticks) frame channels without subscribers are pruned.
@@ -468,6 +468,7 @@ impl GameService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use basketball::Quarter;
 
     #[test]

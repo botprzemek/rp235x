@@ -1,12 +1,12 @@
 //! Core 0 executor and state machine entry task.
 
+use crate::peripherals::{NetPeripherals, TrngPeripherals};
+use crate::state::Machine;
+
 use embassy_executor::{Executor, Spawner};
 use embassy_rp::Peri;
 use embassy_rp::peripherals::{FLASH, WATCHDOG};
 use static_cell::StaticCell;
-
-use crate::peripherals::{NetPeripherals, TrngPeripherals};
-use crate::state::Machine;
 
 /// Core 0 entry point.
 pub struct Core0;

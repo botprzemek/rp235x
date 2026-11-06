@@ -1,14 +1,14 @@
 //! Native macOS center control component with live scoreboard and WebSocket controls in Leptos.
 
+use crate::ui::scoreboard::Scoreboard;
+
 use basketball::{Game, Quarter, Scorable, State as GameState};
 use config::DeviceConfig;
 use leptos::prelude::*;
 use net::{ClientEvent, Device, DeviceType};
 
-use crate::ui::scoreboard::Scoreboard;
-
 #[component]
-pub fn LapapiCenterView(
+pub fn MatchControlPanel(
     game: Signal<Game>,
     is_connected: Signal<bool>,
     on_start_drag: Callback<web_sys::MouseEvent>,
@@ -314,3 +314,5 @@ pub fn LapapiCenterView(
         </main>
     }
 }
+
+pub use MatchControlPanel as LapapiCenterView;

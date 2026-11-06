@@ -34,20 +34,20 @@ pub trait OutputPin {
 /// Collection of digital output pins required to drive a HUB75 LED panel.
 #[non_exhaustive]
 pub struct LedOutputs<P> {
-    pub r1: P,
-    pub g1: P,
-    pub b1: P,
-    pub r2: P,
-    pub g2: P,
-    pub b2: P,
+    pub(crate) r1: P,
+    pub(crate) g1: P,
+    pub(crate) b1: P,
+    pub(crate) r2: P,
+    pub(crate) g2: P,
+    pub(crate) b2: P,
 
-    pub a: P,
-    pub b: P,
-    pub c: P,
-    pub d: P,
-    pub e: P,
+    pub(crate) a: P,
+    pub(crate) b: P,
+    pub(crate) c: P,
+    pub(crate) d: P,
+    pub(crate) e: P,
 
-    pub clk: P,
-    pub lat: P,
-    pub oe: P,
+    pub(crate) clk: P,
+    pub(crate) lat: P,
+    pub(crate) oe: P,
 }

@@ -1,10 +1,10 @@
 //! Bitmap font glyphs for scoreboard digits and uppercase letters.
 
 /// 7x9 bitmap glyph stored as 9 rows of 8-bit masks.
-pub type Glyph = [u8; 9];
+pub(crate) type Glyph = [u8; 9];
 
 /// Bitmap glyphs for ASCII digits `'0'` through `'9'`.
-pub static FONT_DIGITS: [Glyph; 10] = [
+pub(crate) static FONT_DIGITS: [Glyph; 10] = [
     // 0
     [
         0b01111100, 0b11000110, 0b11001110, 0b11011110, 0b11110110, 0b11100110, 0b11000110,
@@ -58,7 +58,7 @@ pub static FONT_DIGITS: [Glyph; 10] = [
 ];
 
 /// Bitmap glyphs for uppercase ASCII letters `'A'` through `'Z'`.
-pub static FONT_UPPERCASE: [Glyph; 26] = [
+pub(crate) static FONT_UPPERCASE: [Glyph; 26] = [
     // A
     [
         0b00111000, 0b01101100, 0b11000110, 0b11000110, 0b11111110, 0b11000110, 0b11000110,
@@ -128,7 +128,7 @@ pub static FONT_UPPERCASE: [Glyph; 26] = [
 /// Returns `true` if the glyph pixel at `(pixel_x, pixel_y)` for `character` is lit.
 #[must_use]
 #[inline]
-pub fn is_ascii_pixel_set(mut character: u8, pixel_x: usize, pixel_y: usize) -> bool {
+pub(crate) fn is_ascii_pixel_set(mut character: u8, pixel_x: usize, pixel_y: usize) -> bool {
     if pixel_x >= 7 || pixel_y >= 9 {
         return false;
     }

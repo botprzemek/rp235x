@@ -1,9 +1,9 @@
 //! Hardware True Random Number Generator (TRNG) peripheral wrapper.
 
+use crate::interrupts::Irqs;
+
 use embassy_rp::trng::{self, Trng};
 use embassy_rp::{Peri, peripherals};
-
-use crate::interrupts::Irqs;
 
 /// RP235x TRNG peripheral bundle.
 pub struct TrngPeripherals {

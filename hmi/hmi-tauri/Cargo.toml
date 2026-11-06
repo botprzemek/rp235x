@@ -1,28 +1,20 @@
 [package]
 name = "hmi-tauri"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [lib]
 name = "tauri_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[profile.release]
-lto = true
-opt-level = "s"
-incremental = false
-codegen-units = 1
-panic = "abort"
-strip = true
-
 [dependencies]
-net = { path = "../../net", features = ["std"] }
+net = { workspace = true, features = ["std"] }
 
+serde = { workspace = true }
+serde_json = { workspace = true }
 tauri = { version = "2", features = ["macos-private-api", "image-png", "image-ico"] }
 tauri-plugin-opener = "2"
-tokio = { version = "1", features = ["rt", "time"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+tokio = { workspace = true, features = ["rt", "time"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

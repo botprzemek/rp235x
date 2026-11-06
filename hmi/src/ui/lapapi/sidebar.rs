@@ -1,14 +1,14 @@
 //! Native macOS sidebar with tree-view for Games and Devices in Leptos (pure typography, no icons/emojis).
 
+use crate::ui::traffic_lights::{CloseButton, MaximizeButton, MinimizeButton};
+
 use basketball::{Game, Scorable};
 use config::DeviceConfig;
 use leptos::prelude::*;
 use net::Device;
 
-use crate::ui::traffic_lights::{CloseButton, MaximizeButton, MinimizeButton};
-
 #[component]
-pub fn LapapiSidebar(
+pub fn NavigationSidebar(
     is_focused: Signal<bool>,
     is_lights_hovered: RwSignal<bool>,
     on_start_drag: Callback<web_sys::MouseEvent>,
@@ -255,3 +255,5 @@ pub fn LapapiSidebar(
         </aside>
     }
 }
+
+pub use NavigationSidebar as LapapiSidebar;
