@@ -1,26 +1,111 @@
 //! Inherent state handlers on [`Machine`] and the UDP client task.
 
-use crate::core0::cyw43::{Cyw43, cyw43_task};
-use crate::core0::dhcp::run_dhcp_server;
-use crate::core0::net::{Net, net_task};
-use crate::core0::udp_handler::unified_udp_task;
-use crate::peripherals::{NetPeripherals, TrngPeripherals};
 use crate::state::{Input, Machine};
 
+#[cfg(feature = "rp235x")]
+use crate::core0::cyw43::{Cyw43, cyw43_task};
+#[cfg(feature = "rp235x")]
+use crate::core0::dhcp::run_dhcp_server;
+#[cfg(feature = "rp235x")]
+use crate::core0::net::{Net, net_task};
+#[cfg(feature = "rp235x")]
+use crate::core0::udp_handler::unified_udp_task;
+#[cfg(feature = "rp235x")]
+use crate::peripherals::{NetPeripherals, TrngPeripherals};
+#[cfg(feature = "rp235x")]
 use config::Config;
+#[cfg(feature = "rp235x")]
 use config::flash::FlashReader;
+#[cfg(feature = "rp235x")]
 use config::print::Print;
+#[cfg(feature = "rp235x")]
+use defmt::Format;
+#[cfg(feature = "rp235x")]
 use embassy_executor::Spawner;
+#[cfg(feature = "rp235x")]
 use embassy_net::{Ipv4Address, Ipv4Cidr, Stack, StaticConfigV4};
+#[cfg(feature = "rp235x")]
 use embassy_rp::Peri;
+#[cfg(feature = "rp235x")]
 use embassy_rp::peripherals::{FLASH, WATCHDOG};
+#[cfg(feature = "rp235x")]
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+#[cfg(feature = "rp235x")]
 use embassy_sync::signal::Signal;
+#[cfg(feature = "rp235x")]
 use embassy_time::Timer;
 
-/// Signal emitted by Core 1 once its HUB75 display task has been spawned.
+/// Identifiers for worker lifecycle state handlers.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "rp235x", derive(Format))]
+pub enum StateHandler {
+    #[default]
+    Boot = 0x01,
+    Sync = 0x02,
+    Networking = 0x03,
+    Running = 0x04,
+    ErrorRecovery = 0x05,
+}
+
+/// Marker handler for the [`crate::state::State::Boot`] lifecycle step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "rp235x", derive(Format))]
+pub struct BootHandler;
+
+/// Marker handler for the [`crate::state::State::CoreSync`] lifecycle step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "rp235x", derive(Format))]
+pub struct SyncHandler;
+
+/// Marker handler for the [`crate::state::State::Networking`] lifecycle step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "rp235x", derive(Format))]
+pub struct NetworkingHandler;
+
+/// Marker handler for the [`crate::state::State::Running`] lifecycle step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "rp235x", derive(Format))]
+pub struct RunningHandler;
+
+/// Marker handler for the [`crate::state::State::ErrorRecovery`] lifecycle step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "rp235x", derive(Format))]
+pub struct ErrorRecoveryHandler;
+
+/// Signal emitted by Core 1 once its HUB75 display task has been spawned (RP235x).
+#[cfg(feature = "rp235x")]
 pub static CORE1_READY_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
+/// Linux thread readiness synchronization between Core 1 and Core 0.
+#[cfg(not(feature = "rp235x"))]
+pub struct LinuxReadySignal {
+    signaled: std::sync::atomic::AtomicBool,
+}
+
+#[cfg(not(feature = "rp235x"))]
+impl LinuxReadySignal {
+    pub const fn new() -> Self {
+        Self {
+            signaled: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    pub fn signal(&self) {
+        self.signaled.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn wait(&self) {
+        while !self.signaled.load(std::sync::atomic::Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+    }
+}
+
+#[cfg(not(feature = "rp235x"))]
+pub static CORE1_READY_SIGNAL: LinuxReadySignal = LinuxReadySignal::new();
+
+#[cfg(feature = "rp235x")]
 impl Machine {
     /// Verifies and prints the flash configuration during boot.
     pub async fn handle_boot(&mut self) {
@@ -149,6 +234,43 @@ impl Machine {
     }
 }
 
+#[cfg(not(feature = "rp235x"))]
+impl Machine {
+    /// Boot verification for Linux worker.
+    pub async fn handle_boot(&mut self) {
+        println!("🔧 [Core 0 Thread] [BOOT] Initializing Linux worker state...");
+        self.transition(Input::BootSuccess);
+    }
+
+    /// Waits for Core 1 (HUB75 renderer thread) readiness.
+    pub async fn handle_sync(&mut self) {
+        println!("⏳ [Core 0 Thread] [SYNC] Waiting for Core 1 ready signal...");
+        CORE1_READY_SIGNAL.wait();
+        println!("✅ [Core 0 Thread] [SYNC] Core 1 is ready! Handshake complete.");
+        self.transition(Input::CoreSynced);
+    }
+
+    /// Networking lifecycle on Linux: transitions state and runs UDP worker loop.
+    pub async fn handle_networking(&mut self) {
+        println!("🌐 [Core 0 Thread] [NETWORKING] Initializing network stack...");
+        self.transition(Input::WifiConnected);
+        println!("🚀 [Core 0 Thread] [RUNNING] Starting UDP worker loop on port 8001...");
+        if let Err(e) = crate::core0::entry::run_udp_worker().await {
+            eprintln!("⚠️ [Core 0 Thread] Networking error: {e}");
+            self.transition(Input::ErrorOccurred);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub async fn handle_running(&mut self) {}
+
+    #[allow(dead_code)]
+    pub async fn handle_error_recovery(&mut self) {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+}
+
+#[cfg(feature = "rp235x")]
 #[embassy_executor::task]
 pub async fn dhcp_task(stack: Stack<'static>) -> ! {
     run_dhcp_server(stack).await

@@ -5,13 +5,20 @@ use wasm_bindgen::prelude::*;
 
 /// Invokes a zero-argument Tauri command on the main window.
 pub fn invoke_tauri_window_command(cmd: &'static str) {
-    if let Some(window) = web_sys::window()
-        && let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
-        && let Ok(core_obj) = js_sys::Reflect::get(&tauri_obj, &JsValue::from_str("core"))
-        && let Ok(invoke_fn) = js_sys::Reflect::get(&core_obj, &JsValue::from_str("invoke"))
-        && let Ok(func) = invoke_fn.dyn_into::<js_sys::Function>()
-    {
-        let _ = func.call1(&core_obj, &JsValue::from_str(cmd));
+    if let Some(window) = web_sys::window() {
+        if let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__")) {
+            if let Ok(core_obj) = js_sys::Reflect::get(&tauri_obj, &JsValue::from_str("core")) {
+                if let Ok(invoke_fn) = js_sys::Reflect::get(&core_obj, &JsValue::from_str("invoke")) {
+                    if let Ok(func) = invoke_fn.dyn_into::<js_sys::Function>() {
+                        let empty_args = js_sys::Object::new();
+                        let _ = func.call2(&core_obj, &JsValue::from_str(cmd), &empty_args);
+                        web_sys::console::log_1(&JsValue::from_str(&format!("[Tauri] Invoked: {}", cmd)));
+                        return;
+                    }
+                }
+            }
+        }
+        web_sys::console::warn_1(&JsValue::from_str(&format!("[Tauri] Could not invoke '{}': __TAURI__.core.invoke not found", cmd)));
     }
 }
 

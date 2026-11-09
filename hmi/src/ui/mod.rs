@@ -7,4 +7,5 @@ pub mod traffic_lights;
 
 pub use hmi::*;
 pub use scoreboard::*;
+pub use traffic_lights::*;
 

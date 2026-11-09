@@ -5,9 +5,10 @@ use std::time::{Duration, Instant};
 use net::event::{ClientEvent, ServerEvent};
 use net::layout::PACKET_SIZE;
 use net::{ClientPacket, Device, DeviceConfigPacket, DeviceType, ServerPacket};
+#[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
-use tauri::{AppHandle, Emitter, Manager, PhysicalSize, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow, WindowEvent};
 
 fn apply_macos_vibrancy(window: &WebviewWindow) {
     let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
@@ -61,36 +62,6 @@ fn window_toggle_fullscreen(app: AppHandle) {
 fn window_close(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.close();
-    }
-}
-
-#[tauri::command]
-fn set_transparent_mode(app: AppHandle, transparent: bool) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.set_decorations(!transparent);
-        let _ = window.set_shadow(!transparent);
-        if transparent {
-            let _ = window.set_fullscreen(true);
-        } else {
-            let _ = window.set_fullscreen(false);
-            let _ = window.set_size(PhysicalSize::new(1280, 800));
-        }
-    }
-}
-
-#[tauri::command]
-fn set_island_mode(app: AppHandle, island: bool) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.set_fullscreen(false);
-        let _ = window.set_decorations(!island);
-        let _ = window.set_shadow(island);
-        let _ = window.set_always_on_top(island);
-        if island {
-            // Compact island window sized precisely for the scoreboard
-            let _ = window.set_size(PhysicalSize::new(760, 240));
-        } else {
-            let _ = window.set_size(PhysicalSize::new(1280, 800));
-        }
     }
 }
 
@@ -226,74 +197,82 @@ pub fn run() {
                 }
             }
 
-            // Native macOS Application Menu
-            let app_submenu = SubmenuBuilder::new(app, "HMI")
-                .about(None)
-                .separator()
-                .hide()
-                .hide_others()
-                .show_all()
-                .separator()
-                .quit()
-                .build()?;
+            #[cfg(target_os = "macos")]
+            {
+                // Native macOS Application Menu
+                let app_submenu = SubmenuBuilder::new(app, "HMI")
+                    .about(None)
+                    .separator()
+                    .hide()
+                    .hide_others()
+                    .show_all()
+                    .separator()
+                    .quit()
+                    .build()?;
 
-            let file_submenu = SubmenuBuilder::new(app, "Plik")
-                .item(
-                    &MenuItemBuilder::with_id("new_game", "Nowa gra")
-                        .accelerator("CmdOrCtrl+N")
-                        .build(app)?,
-                )
-                .separator()
-                .close_window()
-                .build()?;
+                let file_submenu = SubmenuBuilder::new(app, "Plik")
+                    .item(
+                        &MenuItemBuilder::with_id("new_game", "Nowa gra")
+                            .accelerator("CmdOrCtrl+N")
+                            .build(app)?,
+                    )
+                    .separator()
+                    .close_window()
+                    .build()?;
 
-            let edit_submenu = SubmenuBuilder::new(app, "Edycja")
-                .undo()
-                .redo()
-                .separator()
-                .cut()
-                .copy()
-                .paste()
-                .select_all()
-                .build()?;
+                let edit_submenu = SubmenuBuilder::new(app, "Edycja")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .select_all()
+                    .build()?;
 
-            let view_submenu = SubmenuBuilder::new(app, "Widok")
-                .item(
-                    &MenuItemBuilder::with_id("zoom_in", "Przybliż (Zoom In)")
-                        .accelerator("CmdOrCtrl+=")
-                        .build(app)?,
-                )
-                .item(
-                    &MenuItemBuilder::with_id("zoom_out", "Oddal (Zoom Out)")
-                        .accelerator("CmdOrCtrl+-")
-                        .build(app)?,
-                )
-                .item(
-                    &MenuItemBuilder::with_id("zoom_reset", "Rzeczywisty rozmiar (100%)")
-                        .accelerator("CmdOrCtrl+0")
-                        .build(app)?,
-                )
-                .separator()
-                .fullscreen()
-                .build()?;
+                let view_submenu = SubmenuBuilder::new(app, "Widok")
+                    .item(
+                        &MenuItemBuilder::with_id("zoom_in", "Przybliż (Zoom In)")
+                            .accelerator("CmdOrCtrl+=")
+                            .build(app)?,
+                    )
+                    .item(
+                        &MenuItemBuilder::with_id("zoom_out", "Oddal (Zoom Out)")
+                            .accelerator("CmdOrCtrl+-")
+                            .build(app)?,
+                    )
+                    .item(
+                        &MenuItemBuilder::with_id("zoom_reset", "Rzeczywisty rozmiar (100%)")
+                            .accelerator("CmdOrCtrl+0")
+                            .build(app)?,
+                    )
+                    .separator()
+                    .fullscreen()
+                    .build()?;
 
-            let window_submenu = SubmenuBuilder::new(app, "Okno")
-                .minimize()
-                .separator()
-                .close_window()
-                .build()?;
+                let window_submenu = SubmenuBuilder::new(app, "Okno")
+                    .minimize()
+                    .separator()
+                    .close_window()
+                    .build()?;
 
-            let menu = MenuBuilder::new(app)
-                .items(&[
-                    &app_submenu,
-                    &file_submenu,
-                    &edit_submenu,
-                    &view_submenu,
-                    &window_submenu,
-                ])
-                .build()?;
+                let menu = MenuBuilder::new(app)
+                    .items(&[
+                        &app_submenu,
+                        &file_submenu,
+                        &edit_submenu,
+                        &view_submenu,
+                        &window_submenu,
+                    ])
+                    .build()?;
 
-            app.set_menu(menu)?;
+                app.set_menu(menu)?;
+            }
+
+            #[cfg(target_os = "linux")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.remove_menu();
+            }
 
             Ok(())
         })
@@ -332,8 +311,6 @@ pub fn run() {
             window_toggle_maximize,
             window_toggle_fullscreen,
             window_close,
-            set_transparent_mode,
-            set_island_mode,
             send_device_config,
             discover_master
         ])

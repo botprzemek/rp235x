@@ -173,6 +173,16 @@ impl DeviceConfig for Config<Verified> {
     }
 }
 
+impl<T: DeviceConfig> DeviceConfig for &T {
+    fn serial_number(&self) -> Result<&str, ConfigError> {
+        (**self).serial_number()
+    }
+
+    fn device_id(&self) -> Result<&str, ConfigError> {
+        (**self).device_id()
+    }
+}
+
 impl NetworkConfig for Config {
     fn wifi_ssid(&self) -> Result<&str, ConfigError> {
         self.wifi_ssid.0.parse_str()

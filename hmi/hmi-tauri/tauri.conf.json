@@ -19,12 +19,12 @@
         "width": 1060,
         "height": 680,
         "decorations": false,
-        "transparent": true,
-        "shadow": true,
+        "transparent": false,
+        "shadow": false,
         "windowEffects": {
           "effects": ["hudWindow"],
           "state": "active",
-          "radius": 12.0
+          "radius": 0
         }
       }
     ],

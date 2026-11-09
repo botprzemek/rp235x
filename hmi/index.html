@@ -1,11 +1,17 @@
 <!DOCTYPE html>
-<html lang="en" class="bg-transparent">
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <title>Scoreboard App</title>
+    <script>
+        (function() {
+            var isMac = /Macintosh|Mac OS X/i.test(navigator.userAgent);
+            document.documentElement.classList.add(isMac ? 'macos' : 'non-macos');
+        })();
+    </script>
     <link data-trunk rel="rust" data-bin="hydrate" data-cargo-no-default-features data-cargo-features="csr"/>
     <link data-trunk rel="tailwind-css" href="src/assets/css/main.css" />
+    <link data-trunk rel="copy-dir" href="src/assets/fonts" />
 </head>
-<body></body>
+<body oncontextmenu="return false;"></body>
 </html>
-

@@ -20,7 +20,7 @@ bench = false
 required-features = ["linux"]
 
 [features]
-default = []
+default = ["linux"]
 rp235x = [
     "basketball/defmt",
     "config/defmt",
