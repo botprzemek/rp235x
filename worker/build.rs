@@ -31,7 +31,10 @@ fn main() {
     // `memory.x` is changed.
     println!("cargo:rerun-if-changed=memory.x");
 
-    println!("cargo:rustc-link-arg-bins=--nmagic");
-    println!("cargo:rustc-link-arg-bins=-Tlink.x");
-    println!("cargo:rustc-link-arg-bins=-Tdefmt.x");
+    let target = env::var("TARGET").unwrap_or_default();
+    if target.contains("thumb") || target.contains("none") {
+        println!("cargo:rustc-link-arg-bins=--nmagic");
+        println!("cargo:rustc-link-arg-bins=-Tlink.x");
+        println!("cargo:rustc-link-arg-bins=-Tdefmt.x");
+    }
 }

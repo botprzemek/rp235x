@@ -164,4 +164,4 @@ pub fn DeviceInspector(
     }
 }
 
-pub use DeviceInspector as LapapiInspector;
+pub use DeviceInspector as HmiInspector;

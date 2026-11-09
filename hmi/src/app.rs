@@ -1,4 +1,4 @@
-//! Native macOS translucent UI for Lapapi with a functional WebSocket connection,
+//! Native macOS translucent UI for HMI with a functional WebSocket connection,
 //! native OS menu bar integration with Zoom (⌘+, ⌘-, ⌘0), and clean Leptos architecture.
 
 use core::pin::pin;
@@ -10,7 +10,7 @@ use crate::adapters::ws::{
     BrowserWebSocketAdapter, HmiClientHandler, load_master_address,
     load_or_create_browser_device, save_master_address,
 };
-use crate::ui::lapapi::{
+use crate::ui::hmi::{
     DeviceInspector, MasterServerModal, MatchControlPanel, NavigationSidebar, WifiConfigModal,
 };
 
@@ -29,7 +29,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{BinaryType, MessageEvent, WebSocket};
 
-/// Root Lapapi macOS component written in clean Leptos architecture.
+/// Root HMI macOS component written in clean Leptos architecture.
 #[component]
 pub fn App() -> impl IntoView {
     let is_focused = RwSignal::new(true);
@@ -39,6 +39,7 @@ pub fn App() -> impl IntoView {
     // Master server address & modal state
     let master_address = RwSignal::new(load_master_address());
     let is_master_modal_open = RwSignal::new(false);
+    let reconnect_trigger = RwSignal::new(0u32);
 
     // WebSocket state
     let is_connected = RwSignal::new(false);
@@ -47,20 +48,20 @@ pub fn App() -> impl IntoView {
     let logs = RwSignal::new(Vec::<String>::new());
 
     // Domain data
-    let current_game = RwSignal::new(Game::new(Discipline::Fiba5vs5));
+    let current_game = RwSignal::new(Game::new(Discipline::Fiba5v5));
     let available_games = RwSignal::new(Vec::<Game>::new());
     let connected_devices = RwSignal::new(Vec::<Device>::new());
     let selected_device_sn = RwSignal::new(None::<String>);
     let my_device = RwSignal::new(
-        Device::try_new(DeviceType::WebBrowser, "sn-lap-0000", "lapapi-app")
+        Device::try_new(DeviceType::WebBrowser, "sn-hmi-0000", "hmi-app")
             .expect("valid browser DeviceConfig"),
     );
 
     // Wi-Fi Config Modal state
     let is_wifi_modal_open = RwSignal::new(false);
     let wifi_target_ip = RwSignal::new("192.168.4.1".to_string());
-    let wifi_modal_sn = RwSignal::new("sn-lap-0000".to_string());
-    let wifi_modal_id = RwSignal::new("lapapi-worker".to_string());
+    let wifi_modal_sn = RwSignal::new("sn-hmi-0000".to_string());
+    let wifi_modal_id = RwSignal::new("hmi-worker".to_string());
     let wifi_loading = RwSignal::new(false);
     let wifi_status_msg = RwSignal::new(None::<String>);
 
@@ -158,7 +159,7 @@ pub fn App() -> impl IntoView {
                 };
                 let _ = func.call2(
                     &event_obj,
-                    &JsValue::from_str("lapapi-focus-changed"),
+                    &JsValue::from_str("hmi-focus-changed"),
                     on_tauri_focus.as_ref().unchecked_ref(),
                 );
                 on_tauri_focus.forget();
@@ -170,7 +171,7 @@ pub fn App() -> impl IntoView {
                         on_zoom_in.run(());
                     })
                 };
-                let _ = func.call2(&event_obj, &JsValue::from_str("lapapi-zoom-in"), on_zin.as_ref().unchecked_ref());
+                let _ = func.call2(&event_obj, &JsValue::from_str("hmi-zoom-in"), on_zin.as_ref().unchecked_ref());
                 on_zin.forget();
 
                 // OS Menu: Zoom Out
@@ -180,7 +181,7 @@ pub fn App() -> impl IntoView {
                         on_zoom_out.run(());
                     })
                 };
-                let _ = func.call2(&event_obj, &JsValue::from_str("lapapi-zoom-out"), on_zout.as_ref().unchecked_ref());
+                let _ = func.call2(&event_obj, &JsValue::from_str("hmi-zoom-out"), on_zout.as_ref().unchecked_ref());
                 on_zout.forget();
 
                 // OS Menu: Zoom Reset
@@ -190,14 +191,61 @@ pub fn App() -> impl IntoView {
                         on_zoom_reset.run(());
                     })
                 };
-                let _ = func.call2(&event_obj, &JsValue::from_str("lapapi-zoom-reset"), on_zreset.as_ref().unchecked_ref());
+                let _ = func.call2(&event_obj, &JsValue::from_str("hmi-zoom-reset"), on_zreset.as_ref().unchecked_ref());
                 on_zreset.forget();
             }
         }
     });
 
-    // Reactive WebSocket connection lifecycle (reconnects whenever master_address changes)
+    // Background auto-reconnect timer and auto-discovery
     Effect::new(move |_| {
+        async fn sleep_ms(millis: i32) {
+            let promise = js_sys::Promise::new(&mut |resolve, _| {
+                if let Some(window) = web_sys::window() {
+                    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                        &resolve,
+                        millis,
+                    );
+                }
+            });
+            let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+        }
+
+        wasm_bindgen_futures::spawn_local(async move {
+            let mut check_discovery = true;
+
+            loop {
+                sleep_ms(2500).await;
+
+                if !is_connected.get_untracked() {
+                    // If not connected yet in Tauri desktop environment, try auto-discovery if address is default
+                    if check_discovery {
+                        let current = master_address.get_untracked();
+                        if current == "127.0.0.1:3000" || current.is_empty() {
+                            if let Ok(discovered) = crate::adapters::tauri::invoke_discover_master(Some(2)).await {
+                                if !discovered.is_empty() && discovered != current {
+                                    add_log(format!("[AUTO-DISCOVERY] Wykryto Mastera w sieci: {discovered}"));
+                                    save_master_address(&discovered);
+                                    master_address.set(discovered);
+                                    check_discovery = false;
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    // Trigger reconnection attempt
+                    reconnect_trigger.update(|n| *n = n.wrapping_add(1));
+                } else {
+                    check_discovery = false;
+                }
+            }
+        });
+    });
+
+    // Reactive WebSocket connection lifecycle (reconnects whenever master_address or reconnect_trigger changes)
+    Effect::new(move |_| {
+        let _ = reconnect_trigger.get();
         let client_device = load_or_create_browser_device();
         my_device.set(client_device);
 
@@ -303,6 +351,7 @@ pub fn App() -> impl IntoView {
                 wasm_bindgen_futures::spawn_local(async move {
                     let mut device_list: Vec<Device> = Vec::new();
                     let mut game_list: Vec<Game> = Vec::new();
+                    let mut last_ui_flush = js_sys::Date::now();
 
                     while let Some(first_packet) = packet_rx.next().await {
                         let mut current = Some(first_packet);
@@ -323,9 +372,8 @@ pub fn App() -> impl IntoView {
                                         }
                                         games_changed = true;
 
-                                        if current_game_clone.get().id() == game.id()
-                                            || current_game_clone.get().id() == 0
-                                        {
+                                        let current_id = current_game_clone.with_untracked(Game::id);
+                                        if current_id == game.id() || current_id == 0 {
                                             current_game_clone.set(game);
                                         }
                                     }
@@ -345,22 +393,31 @@ pub fn App() -> impl IntoView {
                                 }
                                 ServerEvent::DeviceUpdate => {
                                     if let Ok(updated_dev) = Device::try_from(packet) {
-                                        if let Some(existing) =
+                                        let is_new = if let Some(existing) =
                                             device_list.iter_mut().find(|d| {
                                                 d.serial_number() == updated_dev.serial_number()
                                             })
                                         {
+                                            let changed = *existing != updated_dev;
                                             *existing = updated_dev;
+                                            changed
                                         } else {
                                             device_list.push(updated_dev);
+                                            true
+                                        };
+
+                                        if is_new {
+                                            devices_changed = true;
+                                            // Only log new device connections or real status changes, avoiding flooding
+                                            if device_list.len() <= 64 {
+                                                add_log(format!(
+                                                    "[URZĄDZENIE] {:?} (sn={}) -> Gra #{}",
+                                                    updated_dev.device_type(),
+                                                    updated_dev.serial_number().unwrap_or("-"),
+                                                    updated_dev.game_id()
+                                                ));
+                                            }
                                         }
-                                        devices_changed = true;
-                                        add_log(format!(
-                                            "[URZĄDZENIE] {:?} (sn={}) -> Gra #{}",
-                                            updated_dev.device_type(),
-                                            updated_dev.serial_number().unwrap_or("-"),
-                                            updated_dev.game_id()
-                                        ));
                                     }
                                 }
                                 ServerEvent::DeviceDisconnect => {
@@ -380,11 +437,18 @@ pub fn App() -> impl IntoView {
                             current = packet_rx.try_recv().ok();
                         }
 
-                        if devices_changed {
-                            devices_state_clone.set(device_list.clone());
-                        }
-                        if games_changed {
-                            games_state_clone.set(game_list.clone());
+                        let now = js_sys::Date::now();
+                        // Throttle signal updates to at most ~10 FPS (100ms) under heavy packet bursts
+                        let should_flush = (now - last_ui_flush) >= 100.0 || current.is_none();
+
+                        if should_flush {
+                            if devices_changed {
+                                devices_state_clone.set(device_list.clone());
+                            }
+                            if games_changed {
+                                games_state_clone.set(game_list.clone());
+                            }
+                            last_ui_flush = now;
                         }
                     }
                 });
@@ -463,7 +527,7 @@ pub fn App() -> impl IntoView {
             if let Some(target) = available_games.get().iter().find(|g| g.id() == game_id) {
                 current_game.set(*target);
             }
-            let target_game = Game::new_with_id(game_id, Discipline::Fiba5vs5);
+            let target_game = Game::new_with_id(game_id, Discipline::Fiba5v5);
             send(ClientEvent::GameSelect, target_game.to_bytes());
         })
     };
@@ -478,7 +542,7 @@ pub fn App() -> impl IntoView {
                 .max()
                 .unwrap_or(0)
                 + 1;
-            let new_game = Game::new_with_id(next_id, Discipline::Fiba5vs5);
+            let new_game = Game::new_with_id(next_id, Discipline::Fiba5v5);
             current_game.set(new_game);
             send(ClientEvent::GameCreate, new_game.to_bytes());
         })
@@ -488,6 +552,37 @@ pub fn App() -> impl IntoView {
         let send = send_client_packet.clone();
         Callback::new(move |target: Device| {
             send(ClientEvent::DeviceDisconnect, target.to_bytes());
+        })
+    };
+
+    let on_create_dummy_device = {
+        let send = send_client_packet.clone();
+        Callback::new(move |()| {
+            let next_num = connected_devices
+                .get()
+                .iter()
+                .filter_map(|d| {
+                    let sn = d.serial_number().ok()?;
+                    sn.strip_prefix("dummy-")?.parse::<u32>().ok()
+                })
+                .max()
+                .unwrap_or(0)
+                + 1;
+
+            let sn = format!("dummy-{next_num:04}");
+            let id = format!("dummy-worker-{next_num:04}");
+
+            if let Ok(dummy) = Device::try_new(DeviceType::Worker, &sn, &id) {
+                // Register via master websocket
+                send(ClientEvent::DeviceAssignGame, dummy.to_bytes());
+                // Immediately register locally so UI updates even if offline
+                connected_devices.update(|list| {
+                    if !list.iter().any(|d| d.serial_number() == Ok(&sn)) {
+                        list.push(dummy);
+                    }
+                });
+                add_log(format!("[DUMMY] Utworzono urządzenie testowe: {sn} ({id})"));
+            }
         })
     };
 
@@ -560,8 +655,8 @@ pub fn App() -> impl IntoView {
     });
 
     let on_open_wifi_for_device = Callback::new(move |device: Device| {
-        let sn = device.serial_number().unwrap_or("sn-lap-0000").to_string();
-        let id = device.device_id().unwrap_or("lapapi-worker").to_string();
+        let sn = device.serial_number().unwrap_or("sn-hmi-0000").to_string();
+        let id = device.device_id().unwrap_or("hmi-worker").to_string();
         add_log(format!("[UI] Otwieranie konfiguracji Wi-Fi dla urządzenia: {}", sn));
         wifi_modal_sn.set(sn);
         wifi_modal_id.set(id);
@@ -660,6 +755,7 @@ pub fn App() -> impl IntoView {
                 devices=connected_devices.into()
                 selected_device_sn=selected_device_sn.into()
                 on_select_device=on_select_device
+                on_create_dummy_device=on_create_dummy_device
                 is_connected=is_connected.into()
                 master_address=master_address.into()
                 on_open_master_modal=on_open_master_modal

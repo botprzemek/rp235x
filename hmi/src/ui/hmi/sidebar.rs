@@ -23,6 +23,7 @@ pub fn NavigationSidebar(
     devices: Signal<Vec<Device>>,
     selected_device_sn: Signal<Option<String>>,
     on_select_device: Callback<String>,
+    on_create_dummy_device: Callback<()>,
     is_connected: Signal<bool>,
     master_address: Signal<String>,
     on_open_master_modal: Callback<()>,
@@ -45,6 +46,11 @@ pub fn NavigationSidebar(
     let on_new_game_click = move |e: web_sys::MouseEvent| {
         e.stop_propagation();
         on_create_game.run(());
+    };
+
+    let on_new_dummy_click = move |e: web_sys::MouseEvent| {
+        e.stop_propagation();
+        on_create_dummy_device.run(());
     };
 
     let on_master_click = move |e: web_sys::MouseEvent| {
@@ -83,16 +89,26 @@ pub fn NavigationSidebar(
                         />
                     </div>
 
-                    // Quick create game button
-                    <button
-                        on:mousedown=move |e| stop_propagation.run(e)
-                        on:click=on_new_game_click
-                        disabled=move || !is_connected.get()
-                        title="Utwórz nową grę"
-                        class="text-[11px] px-2 py-0.5 rounded-[5px] bg-white/[0.08] hover:bg-white/[0.14] text-white/90 font-medium cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-white/[0.06]"
-                    >
-                        {"+ Gra"}
-                    </button>
+                    // Quick create buttons
+                    <div class="flex items-center gap-1.5">
+                        <button
+                            on:mousedown=move |e| stop_propagation.run(e)
+                            on:click=on_new_dummy_click
+                            title="Dodaj symulowane urządzenie dummy"
+                            class="text-[11px] px-2 py-0.5 rounded-[5px] bg-white/[0.08] hover:bg-white/[0.14] text-white/90 font-medium cursor-pointer transition-colors border border-white/[0.06]"
+                        >
+                            {"+ Dummy"}
+                        </button>
+                        <button
+                            on:mousedown=move |e| stop_propagation.run(e)
+                            on:click=on_new_game_click
+                            disabled=move || !is_connected.get()
+                            title="Utwórz nową grę"
+                            class="text-[11px] px-2 py-0.5 rounded-[5px] bg-white/[0.08] hover:bg-white/[0.14] text-white/90 font-medium cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed border border-white/[0.06]"
+                        >
+                            {"+ Gra"}
+                        </button>
+                    </div>
                 </div>
 
                 // Master Server Address Bar & Setup Button
@@ -191,10 +207,21 @@ pub fn NavigationSidebar(
                             on:click=toggle_devices
                             class="flex items-center justify-between px-2 py-1 text-[11px] font-medium text-white/50 hover:text-white/80 cursor-pointer rounded-[5px] hover:bg-white/[0.04] transition-colors"
                         >
-                            <span>{"Urządzenia"}</span>
-                            <span class="text-[10px] px-1.5 py-0.2 rounded-[4px] bg-white/[0.06] text-white/50 tabular-nums">
-                                {move || devices.get().len()}
-                            </span>
+                            <div class="flex items-center gap-1.5">
+                                <span>{"Urządzenia"}</span>
+                                <span class="text-[10px] px-1.5 py-0.2 rounded-[4px] bg-white/[0.06] text-white/50 tabular-nums">
+                                    {move || devices.get().len()}
+                                </span>
+                            </div>
+
+                            <button
+                                on:mousedown=move |e| stop_propagation.run(e)
+                                on:click=on_new_dummy_click
+                                title="Dodaj symulowane urządzenie dummy"
+                                class="text-[10px] px-1.5 py-0.2 rounded-[4px] bg-white/[0.08] hover:bg-white/[0.16] text-white/80 font-medium cursor-pointer transition-colors border border-white/[0.06]"
+                            >
+                                {"+ Dummy"}
+                            </button>
                         </div>
 
                         <Show when=move || devices_expanded.get()>
@@ -208,32 +235,47 @@ pub fn NavigationSidebar(
                                             </div>
                                         }.into_any()
                                     } else {
-                                        list.into_iter().map(|d| {
-                                            let sn = d.serial_number().unwrap_or("-").to_string();
-                                            let sn_clone = sn.clone();
-                                            let sn_for_sel = sn.clone();
-                                            let is_sel = Signal::derive(move || selected_device_sn.get().as_ref() == Some(&sn_for_sel));
-                                            let gid = d.game_id();
+                                        let total = list.len();
+                                        let visible = list.into_iter().take(64);
+                                        view! {
+                                            <div>
+                                                {visible.map(|d| {
+                                                    let sn = d.serial_number().unwrap_or("-").to_string();
+                                                    let sn_clone = sn.clone();
+                                                    let sn_for_sel = sn.clone();
+                                                    let is_sel = Signal::derive(move || selected_device_sn.get().as_ref() == Some(&sn_for_sel));
+                                                    let gid = d.game_id();
 
-                                            view! {
-                                                <div
-                                                    on:click=move |_| on_select_device.run(sn_clone.clone())
-                                                    class=move || format!(
-                                                        "group flex items-center justify-between px-2 py-1 rounded-[5px] text-[12px] cursor-pointer transition-colors {}",
-                                                        if is_sel.get() {
-                                                            "bg-white/[0.14] text-white font-medium border border-white/[0.08]"
-                                                        } else {
-                                                            "text-white/75 hover:bg-white/[0.06] hover:text-white"
-                                                        }
-                                                    )
-                                                >
-                                                    <span class="truncate">{sn}</span>
-                                                    <span class="text-[10px] tabular-nums text-white/40 bg-white/[0.06] px-1.5 py-0.5 rounded-[3px]">
-                                                        {if gid == 0 { "—".to_string() } else { format!("#{}", gid) }}
-                                                    </span>
-                                                </div>
-                                            }
-                                        }).collect_view().into_any()
+                                                    view! {
+                                                        <div
+                                                            on:click=move |_| on_select_device.run(sn_clone.clone())
+                                                            class=move || format!(
+                                                                "group flex items-center justify-between px-2 py-1 rounded-[5px] text-[12px] cursor-pointer transition-colors {}",
+                                                                if is_sel.get() {
+                                                                    "bg-white/[0.14] text-white font-medium border border-white/[0.08]"
+                                                                } else {
+                                                                    "text-white/75 hover:bg-white/[0.06] hover:text-white"
+                                                                }
+                                                            )
+                                                        >
+                                                            <span class="truncate">{sn}</span>
+                                                            <span class="text-[10px] tabular-nums text-white/40 bg-white/[0.06] px-1.5 py-0.5 rounded-[3px]">
+                                                                {if gid == 0 { "—".to_string() } else { format!("#{}", gid) }}
+                                                            </span>
+                                                        </div>
+                                                    }
+                                                }).collect_view()}
+                                                {if total > 64 {
+                                                    view! {
+                                                        <div class="text-[10px] text-white/35 py-1 px-2 italic text-center">
+                                                            {format!("+ {} kolejnych urządzeń", total - 64)}
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <span/> }.into_any()
+                                                }}
+                                            </div>
+                                        }.into_any()
                                     }
                                 }}
                             </div>
@@ -256,4 +298,4 @@ pub fn NavigationSidebar(
     }
 }
 
-pub use NavigationSidebar as LapapiSidebar;
+pub use NavigationSidebar as HmiSidebar;

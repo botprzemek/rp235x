@@ -101,7 +101,7 @@ pub fn WifiConfigModal(
                                     maxlength="31"
                                     prop:value=move || device_id.get()
                                     on:input=move |e| device_id.set(event_target_value(&e))
-                                    placeholder="lapapi-app"
+                                    placeholder="hmi-app"
                                     class="w-full bg-black/30 border border-white/[0.1] rounded-[6px] px-2.5 py-1 text-white/90 font-mono text-[12px] focus:border-blue-500 focus:outline-none"
                                 />
                             </div>

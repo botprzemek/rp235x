@@ -262,14 +262,16 @@ pub fn MatchControlPanel(
                         view! { <div/> }.into_any()
                     } else {
                         let assigned_count = workers.iter().filter(|w| w.game_id() == current_game_id).count();
+                        let total_workers = workers.len();
                         let title = format!("Workery przypisane do Gry #{} ({})", current_game_id, assigned_count);
+                        let visible_workers = workers.into_iter().take(32);
                         view! {
                             <div class="w-full max-w-[620px] bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 flex flex-col gap-2">
                                 <span class="text-[11px] font-medium text-white/50">
                                     {title}
                                 </span>
                                 <div class="flex flex-wrap gap-2">
-                                    {workers.into_iter().map(|worker| {
+                                    {visible_workers.map(|worker| {
                                         let sn = worker.serial_number().unwrap_or("-").to_string();
                                         let is_on_this_game = worker.game_id() == current_game_id;
                                         let target_gid = if is_on_this_game { 0 } else { current_game_id };
@@ -305,6 +307,15 @@ pub fn MatchControlPanel(
                                             </button>
                                         }
                                     }).collect_view()}
+                                    {if total_workers > 32 {
+                                        view! {
+                                            <span class="text-[11px] text-white/35 self-center italic px-1">
+                                                {format!("+ {} kolejnych", total_workers - 32)}
+                                            </span>
+                                        }.into_any()
+                                    } else {
+                                        view! { <span/> }.into_any()
+                                    }}
                                 </div>
                             </div>
                         }.into_any()
@@ -315,4 +326,4 @@ pub fn MatchControlPanel(
     }
 }
 
-pub use MatchControlPanel as LapapiCenterView;
+pub use MatchControlPanel as HmiCenterView;

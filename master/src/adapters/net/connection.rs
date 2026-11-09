@@ -22,6 +22,8 @@ use tokio::time::{self, MissedTickBehavior};
 const OUTBOUND_CAPACITY: usize = 256;
 /// Coalescing interval for game/device list updates sent to browsers.
 const BROWSER_SYNC_INTERVAL: Duration = Duration::from_millis(100);
+/// Periodic refresh interval ensuring browsers are kept in sync even if packets were missed.
+const PERIODIC_SYNC_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Connection state shared from the inbound to the outbound half.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -199,6 +201,9 @@ async fn write_loop<W>(
     let mut browser_sync_interval = time::interval(BROWSER_SYNC_INTERVAL);
     browser_sync_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
+    let mut periodic_sync_interval = time::interval(PERIODIC_SYNC_INTERVAL);
+    periodic_sync_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
     loop {
         tokio::select! {
             message = outbound_rx.recv() => {
@@ -237,6 +242,24 @@ async fn write_loop<W>(
                 } else if frame_rx.is_none() || next.game_id != session.game_id {
                     frame_rx = Some(services.game().subscribe_frames(next.game_id));
                 }
+
+                // If this is a newly validated browser session, immediately initialize watchers and sync state
+                if next.browser && !session.browser {
+                    let games = game_rx.get_or_insert_with(|| services.game().watch());
+                    let devices = devices_rx.get_or_insert_with(|| services.devices().watch());
+
+                    known_devices.clear();
+                    let current_devices = devices.borrow_and_update().clone();
+                    sync_devices_to_browser(&mut sender, &mut known_devices, current_devices, &mut sequence_id).await;
+
+                    known_games.clear();
+                    let current_games = games.borrow_and_update().clone();
+                    sync_games_to_browser(&mut sender, &mut known_games, current_games, &mut sequence_id).await;
+
+                    devices_dirty = false;
+                    games_dirty = false;
+                }
+
                 session = next;
             }
 
@@ -274,6 +297,21 @@ async fn write_loop<W>(
                 if devices_dirty && let Some(rx) = &mut devices_rx {
                     devices_dirty = false;
                     let current_devices = rx.borrow_and_update().clone();
+                    sync_devices_to_browser(&mut sender, &mut known_devices, current_devices, &mut sequence_id).await;
+                }
+            }
+
+            _ = periodic_sync_interval.tick(), if session.browser => {
+                if let Some(rx) = &mut game_rx {
+                    let current_games = rx.borrow().clone();
+                    // Force re-announcing join/update events for all games
+                    known_games.clear();
+                    sync_games_to_browser(&mut sender, &mut known_games, current_games, &mut sequence_id).await;
+                }
+                if let Some(rx) = &mut devices_rx {
+                    let current_devices = rx.borrow().clone();
+                    // Force re-announcing join/update events for all devices
+                    known_devices.clear();
                     sync_devices_to_browser(&mut sender, &mut known_devices, current_devices, &mut sequence_id).await;
                 }
             }

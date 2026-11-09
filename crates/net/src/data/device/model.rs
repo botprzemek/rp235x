@@ -3,30 +3,17 @@
 use core::str;
 
 use crate::data::device::layout;
+use crate::define_event;
 use crate::{ClientPacket, ServerPacket};
 
 use config::{ConfigError, DeviceConfig};
 
-/// Kind of client device connected to the master server.
-#[non_exhaustive]
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum DeviceType {
-    Worker = 0x01,
-    WebBrowser = 0x02,
-}
-
-impl TryFrom<u8> for DeviceType {
-    type Error = &'static str;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0x01 => Ok(Self::Worker),
-            0x02 => Ok(Self::WebBrowser),
-            _ => Err("device_type"),
-        }
+define_event! {
+    /// Kind of client device connected to the master server.
+    #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+    pub enum DeviceType {
+        Worker = 0x01,
+        WebBrowser = 0x02,
     }
 }
 

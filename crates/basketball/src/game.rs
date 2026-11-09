@@ -45,7 +45,7 @@ pub struct Game {
 
 impl Default for Game {
     fn default() -> Self {
-        Self::new(Discipline::Fiba5vs5)
+        Self::new(Discipline::Fiba5v5)
     }
 }
 
@@ -119,7 +119,7 @@ impl Game {
         Self {
             id: 1,
             state: State::Idle,
-            discipline: Discipline::Fiba5vs5,
+            discipline: Discipline::Fiba5v5,
             quarter: Quarter::Q1,
             home_score: 0,
             away_score: 0,
@@ -184,7 +184,8 @@ impl Game {
         );
         clock_millis.copy_from_slice(&bytes[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]);
         id_bytes.copy_from_slice(&bytes[layout::ID_START..layout::ID_END]);
-        session_token_bytes.copy_from_slice(&bytes[layout::SESSION_TOKEN_START..layout::SESSION_TOKEN_END]);
+        session_token_bytes
+            .copy_from_slice(&bytes[layout::SESSION_TOKEN_START..layout::SESSION_TOKEN_END]);
 
         let raw_id = u16::from_be_bytes(id_bytes);
         let id = if raw_id == 0 { 1 } else { raw_id };
@@ -227,7 +228,8 @@ impl Game {
         bytes[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]
             .copy_from_slice(&clock_millis_bytes);
         bytes[layout::ID_START..layout::ID_END].copy_from_slice(&id_bytes);
-        bytes[layout::SESSION_TOKEN_START..layout::SESSION_TOKEN_END].copy_from_slice(&session_token_bytes);
+        bytes[layout::SESSION_TOKEN_START..layout::SESSION_TOKEN_END]
+            .copy_from_slice(&session_token_bytes);
 
         bytes
     }

@@ -2,13 +2,13 @@
 build-std = ["core"]
 build-std-features = ["panic_immediate_abort"]
 
-[build]
-target = "thumbv8m.main-none-eabihf"
-
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-runner = ["bash", "-c", 'ssh orangepi-flasher "cat > /tmp/worker.elf && configurator flash /tmp/worker.elf && rm -f /tmp/worker.elf" < "$0"']
-#runner = "probe-rs run --chip RP235x --speed 12000"
+runner = "probe-rs run --chip RP235x --speed 12000 --rtt-scan-memory"
 linker = "flip-link"
 
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+runner = ["bash", "-c", 'ssh worker-1 "systemctl --user stop worker 2>/dev/null || true && cat > ~/.local/bin/worker && chmod +x ~/.local/bin/worker && (systemctl --user start worker 2>/dev/null || ~/.local/bin/worker)" < "$0"']
+
 [env]
-DEFMT_LOG = "debug" #,cyw43=off,embassy_net=off,smoltcp=off"
+DEFMT_LOG = "debug"

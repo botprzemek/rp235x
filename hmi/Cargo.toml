@@ -6,23 +6,18 @@ edition.workspace = true
 [dependencies]
 basketball = { workspace = true, features = ["serde"] }
 config = { workspace = true, default-features = false }
-hub75 = { workspace = true, default-features = false }
 net = { workspace = true, features = ["serde", "std"] }
 
 console_error_panic_hook = "0.1.7"
 futures = { workspace = true }
 js-sys = "0.3.107"
 leptos = { version = "0.8.23", features = ["csr"] }
-serde = { workspace = true }
-serde_json = { workspace = true }
 wasm-bindgen = "0.2.105"
 wasm-bindgen-futures = "0.4.55"
 web-sys = { workspace = true, features = [
     "BinaryType",
-    "CanvasRenderingContext2d",
     "DomRect",
     "Element",
-    "HtmlCanvasElement",
     "HtmlInputElement",
     "KeyboardEvent",
     "MessageEvent",

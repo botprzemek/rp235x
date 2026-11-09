@@ -127,9 +127,34 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         }
 
         if let Some(udp_address) = &self.udp_address {
-            let socket = UdpSocket::bind(udp_address)
-                .await
-                .expect("failed to bind UDP socket");
+            let addr: std::net::SocketAddr = udp_address
+                .parse()
+                .expect("failed to parse UDP listen address");
+
+            let socket2_sock = socket2::Socket::new(
+                if addr.is_ipv6() {
+                    socket2::Domain::IPV6
+                } else {
+                    socket2::Domain::IPV4
+                },
+                socket2::Type::DGRAM,
+                Some(socket2::Protocol::UDP),
+            )
+            .expect("failed to create UDP socket2");
+
+            // Increase receive and send kernel buffers to 4MB to prevent drops under high load
+            let _ = socket2_sock.set_recv_buffer_size(4 * 1024 * 1024);
+            let _ = socket2_sock.set_send_buffer_size(4 * 1024 * 1024);
+            let _ = socket2_sock.set_nonblocking(true);
+
+            socket2_sock
+                .bind(&addr.into())
+                .expect("failed to bind UDP socket with socket2");
+
+            let std_socket: std::net::UdpSocket = socket2_sock.into();
+            let socket = UdpSocket::from_std(std_socket)
+                .expect("failed to convert to tokio UdpSocket");
+
             WorkerDriver::new(socket).spawn(Arc::clone(&services));
         }
 

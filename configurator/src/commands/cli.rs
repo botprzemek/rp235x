@@ -1,8 +1,9 @@
 //! [`Commands`] enum and subcommand dispatcher.
 
 use crate::commands::{
-    CreateArgs, CreateCommand, FlashArgs, FlashCommand, PeekArgs, PeekCommand, VerifyArgs,
-    VerifyCommand, ViewArgs, ViewCommand, WriteArgs, WriteCommand,
+    AttachArgs, AttachCommand, CreateArgs, CreateCommand, FlashArgs, FlashCommand, PeekArgs,
+    PeekCommand, RebootArgs, RebootCommand, VerifyArgs, VerifyCommand, ViewArgs, ViewCommand,
+    WriteArgs, WriteCommand,
 };
 
 use clap::Subcommand;
@@ -17,6 +18,8 @@ pub enum Commands {
     View(ViewArgs),
     Write(WriteArgs),
     Flash(FlashArgs),
+    Reboot(RebootArgs),
+    Attach(AttachArgs),
 }
 
 impl Commands {
@@ -31,6 +34,8 @@ impl Commands {
             View(args) => ViewCommand::handle(&args),
             Write(args) => WriteCommand::handle(&args),
             Flash(args) => FlashCommand::handle(&args),
+            Reboot(args) => RebootCommand::handle(&args),
+            Attach(args) => AttachCommand::handle(&args),
         }
     }
 }

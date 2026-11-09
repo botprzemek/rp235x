@@ -87,7 +87,7 @@ pub async fn unified_udp_task(
         let device_bytes = loaded_config
             .and_then(|c| Device::from_config(DeviceType::Worker, c).ok())
             .unwrap_or_else(|| {
-                Device::try_new(DeviceType::Worker, "sn-lap-0000", "lapapi-worker")
+                Device::try_new(DeviceType::Worker, "sn-hmi-0000", "hmi-worker")
                     .expect("valid default worker device")
             })
             .to_bytes();

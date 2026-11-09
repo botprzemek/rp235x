@@ -7,8 +7,8 @@ use futures::StreamExt;
 use net::layout::PACKET_SIZE;
 use net::{ClientHandler, ClientPacket, Device, DeviceType, RawConnection, ServerPacket};
 
-const SERIAL_NUMBER_STORAGE_KEY: &str = "lapapi_serial_number";
-const MASTER_ADDRESS_STORAGE_KEY: &str = "lapapi_master_address";
+const SERIAL_NUMBER_STORAGE_KEY: &str = "hmi_serial_number";
+const MASTER_ADDRESS_STORAGE_KEY: &str = "hmi_master_address";
 
 /// Default Master address if none stored in LocalStorage.
 pub const DEFAULT_MASTER_ADDRESS: &str = "127.0.0.1:3000";
@@ -22,6 +22,17 @@ pub fn load_master_address() -> String {
     {
         return addr.trim().to_string();
     }
+
+    // Auto-detect host from window.location in browser mode
+    if let Some(window) = web_sys::window()
+        && let Ok(location) = window.location().host()
+        && !location.is_empty()
+        && !location.contains("localhost:1420")
+        && !location.contains("tauri.localhost")
+    {
+        return location;
+    }
+
     DEFAULT_MASTER_ADDRESS.to_string()
 }
 
@@ -39,19 +50,19 @@ pub fn load_or_create_browser_device() -> Device {
 
     if let Some(ref store) = storage
         && let Ok(Some(saved_serial_number)) = store.get_item(SERIAL_NUMBER_STORAGE_KEY)
-        && let Ok(device) = Device::try_new(DeviceType::WebBrowser, &saved_serial_number, "lapapi-app")
+        && let Ok(device) = Device::try_new(DeviceType::WebBrowser, &saved_serial_number, "hmi-app")
     {
         return device;
     }
 
     let suffix = (js_sys::Math::random() * 10000.0) as u16 % 10000;
-    let serial_number = format!("sn-lap-{suffix:04}");
+    let serial_number = format!("sn-hmi-{suffix:04}");
 
     if let Some(store) = storage {
         let _ = store.set_item(SERIAL_NUMBER_STORAGE_KEY, &serial_number);
     }
 
-    Device::try_new(DeviceType::WebBrowser, &serial_number, "lapapi-app")
+    Device::try_new(DeviceType::WebBrowser, &serial_number, "hmi-app")
         .expect("valid browser DeviceConfig")
 }
 
@@ -113,4 +124,3 @@ impl ClientHandler for HmiClientHandler {
     }
 }
 
-pub use HmiClientHandler as LapapiClientHandler;

@@ -115,7 +115,7 @@ impl GameService {
     pub fn new(game_repository: GameRepository) -> Self {
         let mut initial_games = game_repository.select();
         if initial_games.is_empty() {
-            let default_game = Game::new_with_id(1, Discipline::Fiba5vs5);
+            let default_game = Game::new_with_id(1, Discipline::Fiba5v5);
             initial_games.push(default_game);
             game_repository.upsert(&initial_games);
         }
@@ -309,7 +309,7 @@ impl GameService {
     #[must_use]
     pub fn default_game(&self) -> Game {
         self.by_id(1)
-            .unwrap_or_else(|| Game::new_with_id(1, Discipline::Fiba5vs5))
+            .unwrap_or_else(|| Game::new_with_id(1, Discipline::Fiba5v5))
     }
 
     /// Creates and registers a new [`Game`] with the next available ID and `discipline`.
@@ -474,7 +474,7 @@ mod tests {
     #[test]
     fn test_zero_drift_over_12_minutes_at_60hz() {
         let start = Instant::now();
-        let mut game = Game::new_with_id(1, Discipline::Fiba5vs5); // 12 minutes = 720_000 ms
+        let mut game = Game::new_with_id(1, Discipline::Fiba5v5); // 12 minutes = 720_000 ms
         game.resume();
 
         let mut active = ActiveGame::new(game, start);

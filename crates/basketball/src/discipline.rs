@@ -18,8 +18,8 @@ pub struct DisciplineConfig {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Discipline {
-    Fiba5vs5 = 0x00,
-    Fiba3x3 = 0x01,
+    Fiba5v5 = 0x00,
+    Fiba3v3 = 0x01,
 }
 
 impl TryFrom<u8> for Discipline {
@@ -27,8 +27,8 @@ impl TryFrom<u8> for Discipline {
 
     fn try_from(discipline: u8) -> Result<Self, Self::Error> {
         match discipline {
-            0x00 => Ok(Self::Fiba5vs5),
-            0x01 => Ok(Self::Fiba3x3),
+            0x00 => Ok(Self::Fiba5v5),
+            0x01 => Ok(Self::Fiba3v3),
             _ => Err(""),
         }
     }
@@ -39,12 +39,12 @@ impl Discipline {
     #[must_use]
     pub fn config(&self) -> DisciplineConfig {
         match self {
-            Self::Fiba5vs5 => DisciplineConfig {
+            Self::Fiba5v5 => DisciplineConfig {
                 initial_quarter: Quarter::Q1,
                 regulation_millis: 720_000,
                 clock_millis: 24_000,
             },
-            Self::Fiba3x3 => DisciplineConfig {
+            Self::Fiba3v3 => DisciplineConfig {
                 initial_quarter: Quarter::None,
                 regulation_millis: 600_000,
                 clock_millis: 24_000,

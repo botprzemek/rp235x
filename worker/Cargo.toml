@@ -4,33 +4,82 @@ version.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "worker"
-path = "src/main.rs"
+name = "rp235x"
+path = "src/bin/rp235x.rs"
 test = false
 doctest = false
 bench = false
+required-features = ["rp235x"]
+
+[[bin]]
+name = "linux"
+path = "src/bin/linux.rs"
+test = false
+doctest = false
+bench = false
+required-features = ["linux"]
+
+[features]
+default = []
+rp235x = [
+    "basketball/defmt",
+    "config/defmt",
+    "hub75/rp235x",
+    "net/defmt",
+
+    "dep:cortex-m",
+    "dep:cortex-m-rt",
+    "dep:critical-section",
+    "dep:cyw43",
+    "dep:cyw43-pio",
+    "dep:defmt",
+    "dep:defmt-rtt",
+    "dep:embassy-embedded-hal",
+    "dep:embassy-executor",
+    "dep:embassy-futures",
+    "dep:embassy-net",
+    "dep:embassy-rp",
+    "dep:embassy-sync",
+    "dep:embassy-time",
+    "dep:embedded-io-async",
+    "dep:panic-probe",
+    "dep:static_cell",
+]
+linux = [
+    "basketball/std",
+    "config/std",
+    "net/std",
+
+    "dep:tokio",
+]
 
 [dependencies]
-basketball = { workspace = true, features = ["defmt"] }
-config = { workspace = true, features = ["defmt"], default-features = false }
-hub75 = { workspace = true, features = ["rp235x"] }
-net = { workspace = true, features = ["defmt"] }
+basketball = { workspace = true }
+config = { workspace = true }
+hub75 = { workspace = true }
+net = { workspace = true }
 
-cortex-m = { workspace = true, features = ["inline-asm"] }
-cortex-m-rt = { workspace = true }
-critical-section = { version = "1.1", features = [] }
-cyw43 = { version = "0.7.0", features = ["defmt", "firmware-logs"] }
-cyw43-pio = { version = "0.10.0", features = ["defmt"] }
-defmt = { workspace = true }
-defmt-rtt = { workspace = true }
-embassy-embedded-hal = { version = "0.6.0", features = ["defmt"] }
-embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
-embassy-futures = { version = "0.1.2", features = [] }
-embassy-net = { version = "=0.9.0", features = ["defmt", "tcp", "udp", "raw", "dhcpv4"] }
-embassy-rp = { version = "0.10.0", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"] }
-embassy-sync = { version = "0.8.0", features = ["defmt"] }
-embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime"] }
-embedded-io-async = { version = "0.7.0", features = ["defmt"] }
-heapless = "0.9.3"
-panic-probe = { version = "1.0.0", features = ["print-defmt"] }
-static_cell = { version = "2.1", features = [] }
+# Shared
+heapless = { workspace = true }
+
+# Linux target
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "net"], optional = true }
+
+# RP235x Cortex-M
+cortex-m = { workspace = true, features = ["inline-asm"], optional = true }
+cortex-m-rt = { workspace = true, optional = true }
+critical-section = { version = "1.1", features = [], optional = true }
+cyw43 = { version = "0.7.0", features = ["defmt", "firmware-logs"], optional = true }
+cyw43-pio = { version = "0.10.0", features = ["defmt"], optional = true }
+defmt = { workspace = true, optional = true }
+defmt-rtt = { workspace = true, optional = true }
+embassy-embedded-hal = { version = "0.6.0", features = ["defmt"], optional = true }
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt", "defmt"], optional = true }
+embassy-futures = { version = "0.1.2", features = [], optional = true }
+embassy-net = { version = "=0.9.0", features = ["defmt", "tcp", "udp", "raw", "dhcpv4"], optional = true }
+embassy-rp = { version = "0.10.0", features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rp235xa", "binary-info"], optional = true }
+embassy-sync = { version = "0.8.0", features = ["defmt"], optional = true }
+embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime"], optional = true }
+embedded-io-async = { version = "0.7.0", features = ["defmt"], optional = true }
+panic-probe = { version = "1.0.0", features = ["print-defmt"], optional = true }
+static_cell = { version = "2.1", features = [], optional = true }

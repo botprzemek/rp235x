@@ -12,16 +12,22 @@ use config::DeviceConfig;
 use net::layout::PACKET_SIZE;
 use net::{ClientEvent, ClientPacket, Device, ServerEvent, ServerPacket};
 use tokio::net::UdpSocket;
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 use tokio::time::{self, MissedTickBehavior};
 
 const SYNC_HEARTBEAT_DURATION: Duration = Duration::from_millis(100); // 10 Hz periodic sync (event-driven broadcast handles immediate updates)
+const OUTBOUND_QUEUE_CAPACITY: usize = 4096;
 
 #[derive(Clone)]
 struct ActiveWorker {
     address: SocketAddr,
     serial_number: String,
     session_token: u32,
+}
+
+struct OutboundAck {
+    packet_bytes: [u8; PACKET_SIZE],
+    target: SocketAddr,
 }
 
 /// UDP transport driver streaming periodic and event-driven game updates to RP235x workers.
@@ -47,24 +53,45 @@ impl WorkerDriver {
 
     async fn run(self, services: Arc<Services>) {
         let (worker_tx, worker_rx) = watch::channel(HashMap::<String, ActiveWorker>::new());
+        let (outbound_tx, outbound_rx) = mpsc::channel::<OutboundAck>(OUTBOUND_QUEUE_CAPACITY);
 
+        // Independent transmit task: drains responses without blocking the receive loop
+        let transmit_socket = Arc::clone(&self.listener);
+        tokio::spawn(async move {
+            Self::handle_outbound_queue(transmit_socket, outbound_rx).await;
+        });
+
+        // Dedicated receive task: non-blocking packet ingestion into processing pipeline
         let receive_socket = Arc::clone(&self.listener);
         let receive_services = Arc::clone(&services);
         tokio::spawn(async move {
-            Self::handle_incoming(receive_socket, receive_services, worker_tx).await;
+            Self::handle_incoming(receive_socket, receive_services, worker_tx, outbound_tx).await;
         });
 
-        let transmit_socket = Arc::clone(&self.listener);
-        let transmit_services = Arc::clone(&services);
+        // Periodic tick broadcast task
+        let tick_socket = Arc::clone(&self.listener);
+        let tick_services = Arc::clone(&services);
         tokio::spawn(async move {
-            Self::handle_ticks(transmit_socket, transmit_services, worker_rx).await;
+            Self::handle_ticks(tick_socket, tick_services, worker_rx).await;
         });
+    }
+
+    async fn handle_outbound_queue(
+        socket: Arc<UdpSocket>,
+        mut outbound_rx: mpsc::Receiver<OutboundAck>,
+    ) {
+        while let Some(outbound) = outbound_rx.recv().await {
+            let _ = socket
+                .send_to(&outbound.packet_bytes, outbound.target)
+                .await;
+        }
     }
 
     async fn handle_incoming(
         socket: Arc<UdpSocket>,
         services: Arc<Services>,
         worker_tx: watch::Sender<HashMap<String, ActiveWorker>>,
+        outbound_tx: mpsc::Sender<OutboundAck>,
     ) {
         let mut sequence_id: u8 = 0;
         let mut receive_buffer = [0u8; PACKET_SIZE];
@@ -72,18 +99,9 @@ impl WorkerDriver {
 
         loop {
             tokio::select! {
-                Ok(target_serial_number) = disconnect_rx.recv() => {
-                    let mut removed = false;
-                    worker_tx.send_modify(|workers| {
-                        if workers.remove(&target_serial_number).is_some() {
-                            removed = true;
-                        }
-                    });
-                    if removed {
-                        println!("INFO: [UDP] Forcefully disconnected worker sn={target_serial_number}");
-                    }
-                }
+                biased;
 
+                // Priority 1: Ingest and process UDP packet immediately
                 receive_result = socket.recv_from(&mut receive_buffer) => {
                     let (size, remote_address) = match receive_result {
                         Ok(result) => result,
@@ -174,7 +192,7 @@ impl WorkerDriver {
                         } else {
                             None
                         }
-                        .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5vs5));
+                        .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5v5));
                         current_game.set_session_token(session_token);
 
                         let ack_packet = ServerPacket::new(
@@ -182,7 +200,25 @@ impl WorkerDriver {
                             sequence_id,
                             current_game.to_bytes(),
                         );
-                        let _ = socket.send_to(&ack_packet.to_bytes(), remote_address).await;
+
+                        // Asynchronous, non-blocking enqueue of the ACK packet
+                        let _ = outbound_tx.try_send(OutboundAck {
+                            packet_bytes: ack_packet.to_bytes(),
+                            target: remote_address,
+                        });
+                    }
+                }
+
+                // Priority 2: Disconnection events
+                Ok(target_serial_number) = disconnect_rx.recv() => {
+                    let mut removed = false;
+                    worker_tx.send_modify(|workers| {
+                        if workers.remove(&target_serial_number).is_some() {
+                            removed = true;
+                        }
+                    });
+                    if removed {
+                        println!("INFO: [UDP] Forcefully disconnected worker sn={target_serial_number}");
                     }
                 }
             }
@@ -232,7 +268,7 @@ impl WorkerDriver {
                         } else {
                             None
                         }
-                        .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5vs5));
+                        .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5v5));
                         game.set_session_token(worker.session_token);
 
                         sequence_id = sequence_id.wrapping_add(1);

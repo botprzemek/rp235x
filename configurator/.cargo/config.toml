@@ -1,2 +1,6 @@
+[build]
+target = "aarch64-unknown-linux-gnu"
+
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
+runner = ["bash", "-c", 'ssh master-1 "cat > ~/.local/bin/configurator && chmod +x ~/.local/bin/configurator" < "$0"']

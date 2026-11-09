@@ -122,7 +122,7 @@ impl ServerHandler for MasterServerHandler {
             ClientEvent::HandshakeHeartbeat if self.validated_device.is_some() => {
                 let game = self
                     .selected_game()
-                    .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5vs5));
+                    .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5v5));
                 Some(ServerPacket::new(
                     ServerEvent::HandshakeAck,
                     self.sequence_id,
@@ -172,7 +172,7 @@ impl ServerHandler for MasterServerHandler {
                         self.validated_device = Some(registered);
                         let game = self
                             .selected_game()
-                            .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5vs5));
+                            .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5v5));
                         Some(ServerPacket::new(
                             ServerEvent::HandshakeAck,
                             self.sequence_id,
@@ -218,7 +218,7 @@ impl ServerHandler for MasterServerHandler {
                     ClientEvent::GameCreate => {
                         let discipline = Game::try_from(packet)
                             .map(|game| game.discipline())
-                            .unwrap_or(Discipline::Fiba5vs5);
+                            .unwrap_or(Discipline::Fiba5v5);
                         let created = self.services.game().create_game(discipline);
                         self.selected_game_id = created.id();
                         if let Some(mut device) = self.validated_device {

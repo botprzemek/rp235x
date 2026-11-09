@@ -1,26 +1,21 @@
 [workspace]
 resolver = "3"
 members = [
-    "basketball",
-    "benchmark",
-    "config",
+    "crates/*",
     "configurator",
     "hmi",
     "hmi/hmi-tauri",
-    "hub75",
     "master",
-    "net",
     "worker",
 ]
 default-members = [
-    "basketball",
-    "benchmark",
-    "config",
+    "crates/basketball",
+    "crates/config",
+    "crates/hub75",
+    "crates/net",
     "configurator",
     "hmi",
-    "hub75",
     "master",
-    "net",
 ]
 
 [workspace.package]
@@ -43,10 +38,10 @@ opt-level = 3
 debug = true
 
 [workspace.dependencies]
-basketball = { path = "basketball" }
-config = { path = "config", default-features = false }
-hub75 = { path = "hub75", default-features = false }
-net = { path = "net" }
+basketball = { path = "crates/basketball" }
+config = { path = "crates/config", default-features = false }
+hub75 = { path = "crates/hub75", default-features = false }
+net = { path = "crates/net" }
 
 bytes = "1.12.1"
 cortex-m = { version = "0.7.6" }
@@ -55,6 +50,7 @@ defmt = { version = "1.2.0" }
 defmt-rtt = { version = "1.0.0" }
 futures = { version = "0.3.34", default-features = false }
 gloo-net = { version = "0.7.0" }
+heapless = "0.9.3"
 mime_guess = { version = "2.0.5" }
 redb = { version = "4.2.0" }
 serde = { version = "1.0.229", features = ["derive"] }

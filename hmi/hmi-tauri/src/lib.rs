@@ -102,7 +102,7 @@ async fn discover_master(timeout_secs: Option<u64>) -> Result<String, String> {
         let _ = socket.set_broadcast(true);
         let _ = socket.set_read_timeout(Some(Duration::from_millis(400)));
 
-        let device = Device::try_new(DeviceType::WebBrowser, "sn-lap-disc", "lapapi-hmi")
+        let device = Device::try_new(DeviceType::WebBrowser, "sn-hmi-disc", "hmi-app")
             .map_err(|e| format!("Błąd inicjalizacji urządzenia: {:?}", e))?;
         let packet = ClientPacket::new(ClientEvent::HandshakeRequest, 0, device.to_bytes());
         let packet_bytes = packet.to_bytes();
@@ -227,7 +227,7 @@ pub fn run() {
             }
 
             // Native macOS Application Menu
-            let app_submenu = SubmenuBuilder::new(app, "Lapapi")
+            let app_submenu = SubmenuBuilder::new(app, "HMI")
                 .about(None)
                 .separator()
                 .hide()
@@ -301,16 +301,16 @@ pub fn run() {
             let id = event.id().as_ref();
             match id {
                 "zoom_in" => {
-                    let _ = app.emit("lapapi-zoom-in", ());
+                    let _ = app.emit("hmi-zoom-in", ());
                 }
                 "zoom_out" => {
-                    let _ = app.emit("lapapi-zoom-out", ());
+                    let _ = app.emit("hmi-zoom-out", ());
                 }
                 "zoom_reset" => {
-                    let _ = app.emit("lapapi-zoom-reset", ());
+                    let _ = app.emit("hmi-zoom-reset", ());
                 }
                 "new_game" => {
-                    let _ = app.emit("lapapi-new-game", ());
+                    let _ = app.emit("hmi-new-game", ());
                 }
                 _ => {}
             }
@@ -318,7 +318,7 @@ pub fn run() {
         .on_window_event(|window, event| match event {
             WindowEvent::Focused(focused) => {
                 let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
-                let _ = window.emit("lapapi-focus-changed", *focused);
+                let _ = window.emit("hmi-focus-changed", *focused);
             }
             WindowEvent::Resized(_) | WindowEvent::ThemeChanged(_) => {
                 let _ = window.set_background_color(Some(Color(0, 0, 0, 0)));
