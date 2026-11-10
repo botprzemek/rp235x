@@ -46,7 +46,7 @@ impl<P: OutputPin> LedOutputs<P> {
         bitplanes: &BitplaneBuffer<WIDTH, HALF_HEIGHT>,
         brightness_percent: u8,
     ) {
-        const BASE_CYCLES: u32 = 50;
+        const BASE_CYCLES: u32 = 20;
         let brightness_factor = u32::from(brightness_percent.min(100));
 
         for bit in 0..8 {

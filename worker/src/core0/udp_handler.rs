@@ -1,9 +1,10 @@
 //! Unified UDP handler for Worker state synchronization and OTA Wi-Fi configuration.
 
 use crate::peripherals::flash::write_config_to_flash;
-use crate::state::GAME_STATE;
+use crate::state::{GAME_STATE, IS_CONNECTED_TO_MASTER};
 
-use basketball::Game;
+use basketball::{Game, Scorable};
+use core::sync::atomic::Ordering;
 use config::flash::FlashReader;
 use config::{Config, ConfigBuilder};
 use embassy_net::udp::{PacketMetadata, UdpSocket};
@@ -150,6 +151,13 @@ pub async fn unified_udp_task(
                 };
 
                 let session_token = if let Ok(game) = Game::try_from(server_packet) {
+                    defmt::info!(
+                        "[CORE0 UDP] Initial Handshake Game: game_id={}, score={}:{}, time={}",
+                        game.id(),
+                        game.score(basketball::Team::Home),
+                        game.score(basketball::Team::Away),
+                        game.regulation_millis()
+                    );
                     GAME_STATE.set(game);
                     game.session_token()
                 } else {
@@ -161,6 +169,7 @@ pub async fn unified_udp_task(
                     remote_endpoint,
                     session_token
                 );
+                IS_CONNECTED_TO_MASTER.store(true, Ordering::Release);
                 break (remote_endpoint.endpoint, session_token);
             };
 
@@ -207,11 +216,25 @@ pub async fn unified_udp_task(
                             if let Ok(game) = Game::try_from(packet) {
                                 if packet.event() == ServerEvent::HandshakeAck {
                                     session_token = game.session_token();
+                                    defmt::info!(
+                                        "[CORE0 UDP] HandshakeAck: game_id={}, score={}:{}, time={}",
+                                        game.id(),
+                                        game.score(basketball::Team::Home),
+                                        game.score(basketball::Team::Away),
+                                        game.regulation_millis()
+                                    );
                                     GAME_STATE.set(game);
                                 } else if session_token == 0 || game.session_token() == 0 || game.session_token() == session_token {
+                                    defmt::info!(
+                                        "[CORE0 UDP] GameUpdate: game_id={}, score={}:{}, time={}",
+                                        game.id(),
+                                        game.score(basketball::Team::Home),
+                                        game.score(basketball::Team::Away),
+                                        game.regulation_millis()
+                                    );
                                     GAME_STATE.set(game);
                                 } else {
-                                    defmt::warn!("[WORKER] Odrzucono pakiet UDP: nieprawidłowy token sesji!");
+                                    defmt::warn!("[WORKER] Odrzucono pakiet UDP: nieprawidłowy token sesji! (expected {:x}, got {:x})", session_token, game.session_token());
                                 }
                             }
                         }
@@ -237,7 +260,7 @@ pub async fn unified_udp_task(
                             defmt::info!(
                                 "[WORKER] Brak odpowiedzi od Mastera przez 9s! Utracono połączenie."
                             );
-
+                            IS_CONNECTED_TO_MASTER.store(false, Ordering::Release);
                             break;
                         }
                     }

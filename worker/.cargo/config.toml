@@ -7,8 +7,8 @@ runner = "probe-rs run --chip RP235x --speed 12000"
 linker = "flip-link"
 
 [target.aarch64-unknown-linux-gnu]
-# runner = ["bash", "-c", 'ssh worker-1 "systemctl --user stop worker 2>/dev/null || true && cat > ~/.local/bin/worker && chmod +x ~/.local/bin/worker && (systemctl --user start worker 2>/dev/null || ~/.local/bin/worker)" < "$0"']
+runner = ["bash", "-c", 'ssh worker-1 "systemctl --user stop worker 2>/dev/null || true && cat > ~/.local/bin/worker && chmod +x ~/.local/bin/worker && (systemctl --user start worker 2>/dev/null || ~/.local/bin/worker)" < "$0"']
 linker = "aarch64-linux-gnu-gcc"
 
 [env]
-DEFMT_LOG = "debug"
+DEFMT_LOG = "debug,cyw43=off,embassy_net=off,smoltcp=off"

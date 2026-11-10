@@ -323,6 +323,8 @@ pub fn NavigationBar(
     on_hold_maximize: Callback<()>,
     #[prop(into, default = 500)]
     hold_delay_ms: i32,
+    #[prop(optional)]
+    right_action: Option<AnyView>,
 ) -> impl IntoView {
     let on_start_drag = move |e: web_sys::MouseEvent| {
         if e.button() == 0 {
@@ -361,7 +363,9 @@ pub fn NavigationBar(
                 })}
             </div>
 
-            <div class="w-14 shrink-0"></div>
+            <div class="shrink-0 flex items-center justify-end min-w-14">
+                {right_action}
+            </div>
         </header>
     }
 }

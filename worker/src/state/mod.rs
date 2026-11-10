@@ -7,4 +7,4 @@ pub use handler::{
     BootHandler, CORE1_READY_SIGNAL, ErrorRecoveryHandler, NetworkingHandler, RunningHandler,
     StateHandler, SyncHandler,
 };
-pub use machine::{GAME_STATE, Input, Machine, State};
+pub use machine::{GAME_STATE, IS_CONNECTED_TO_MASTER, Input, Machine, State};

@@ -29,6 +29,7 @@ pub fn NavigationSidebar(
     on_open_master_modal: Callback<()>,
     sidebar_bg_class: Signal<&'static str>,
     on_open_wifi_setup: Callback<()>,
+    #[prop(optional)] on_back: Option<Callback<()>>,
 ) -> impl IntoView {
     let games_expanded = RwSignal::new(true);
     let devices_expanded = RwSignal::new(true);
@@ -88,6 +89,23 @@ pub fn NavigationSidebar(
                             onclick=on_maximize
                         />
                     </div>
+
+                    {on_back.map(|cb| view! {
+                        <button
+                            type="button"
+                            title="Wróć do nowego widoku"
+                            on:click=move |e| {
+                                e.stop_propagation();
+                                cb.run(());
+                            }
+                            class="px-2 py-0.5 rounded text-[11px] font-medium bg-white/10 hover:bg-white/20 active:scale-95 text-white/80 hover:text-white transition-all flex items-center gap-1 cursor-pointer border border-white/10 shadow-sm"
+                        >
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg>
+                            <span>"Wróć"</span>
+                        </button>
+                    })}
 
                     // Quick create buttons
                     <div class="flex items-center gap-1.5">

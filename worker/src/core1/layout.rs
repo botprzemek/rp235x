@@ -88,3 +88,21 @@ impl ScoreboardLayout {
         display.prepare_bitplanes();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scoreboard_render_pixels() {
+        let mut display = DisplayBuffer::<64, 32, 16>::default();
+        let mut layout = ScoreboardLayout::new();
+        let game = Game::empty();
+        layout.render(&mut display, &game, hub75::RED);
+
+        println!("home: '{}'", layout.home_buffer);
+        println!("guest: '{}'", layout.guest_buffer);
+        println!("quarter: '{}'", layout.quarter_buffer);
+        println!("clock: '{}'", layout.clock_buffer);
+    }
+}

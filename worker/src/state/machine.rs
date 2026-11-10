@@ -13,6 +13,11 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 #[cfg(feature = "rp235x")]
 use embassy_sync::signal::Signal;
 
+use core::sync::atomic::AtomicBool;
+
+/// Global flag indicating whether Worker has established connection with Master over UDP.
+pub static IS_CONNECTED_TO_MASTER: AtomicBool = AtomicBool::new(false);
+
 #[cfg(not(feature = "rp235x"))]
 use std::sync::RwLock;
 

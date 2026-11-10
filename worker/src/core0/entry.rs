@@ -15,7 +15,10 @@ use embassy_rp::peripherals::{FLASH, WATCHDOG};
 use static_cell::StaticCell;
 
 #[cfg(not(feature = "rp235x"))]
-use crate::state::{GAME_STATE, Machine};
+#[cfg(not(feature = "rp235x"))]
+use crate::state::{GAME_STATE, IS_CONNECTED_TO_MASTER, Machine};
+#[cfg(not(feature = "rp235x"))]
+use core::sync::atomic::Ordering;
 #[cfg(not(feature = "rp235x"))]
 use basketball::Game;
 #[cfg(not(feature = "rp235x"))]
@@ -164,6 +167,7 @@ pub async fn run_udp_worker() -> Result<(), Box<dyn std::error::Error + Send + S
                 if master_address.is_none() || master_address != Some(remote_addr) {
                     println!("🎉 [Core 0 Thread] Connected to Master server at {remote_addr}");
                     master_address = Some(remote_addr);
+                    IS_CONNECTED_TO_MASTER.store(true, Ordering::Release);
                 }
 
                 match server_packet.event() {
