@@ -1,5 +1,3 @@
-//! HTTP route handlers for REST API and WebSocket connections.
-
 mod api;
 mod websocket;
 

@@ -1,5 +1,3 @@
-//! `attach` subcommand for attaching to the running RP2350 target and tailing RTT logs / monitoring.
-
 use std::io::{self, Write};
 use std::time::Duration;
 
@@ -9,20 +7,18 @@ use config::probe_rs::Permissions;
 use config::probe_rs::probe::list::Lister;
 use config::probe_rs::rtt::Rtt;
 
-/// Arguments for the `attach` subcommand.
 #[derive(Args)]
 #[command(about = "Attach to the running RP2350 target and stream RTT logs", long_about = None)]
 pub struct AttachArgs {
-    /// SWD clock speed in kHz (defaults to 5000 kHz = 5 MHz)
+
     #[arg(short, long, default_value_t = 5000)]
     pub speed: u32,
 }
 
-/// Handler for the `attach` subcommand.
 pub struct AttachCommand;
 
 impl AttachCommand {
-    /// Attaches to the RP2350 target without resetting and streams RTT output.
+
     pub fn handle(args: &AttachArgs) -> Result<(), ConfigError> {
         let lister = Lister::new();
         let probes = lister.list_all();
@@ -62,7 +58,7 @@ impl AttachCommand {
                     break Some(rtt);
                 }
                 Err(_error) => {
-                    // Non-fatal while device initializes
+
                     std::thread::sleep(Duration::from_millis(100));
                     continue;
                 }

@@ -1,5 +1,3 @@
-//! Legacy HMI interface with 3-column macOS layout: Sidebar, MatchControlPanel, and DeviceInspector.
-
 use core::pin::pin;
 use core::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
@@ -28,7 +26,6 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{BinaryType, MessageEvent, WebSocket};
 
-/// Full Legacy HMI component with match controls, tree navigation, and inspector.
 #[component]
 pub fn LegacyHmiView(
     on_back: Callback<()>,
@@ -37,18 +34,15 @@ pub fn LegacyHmiView(
     let is_lights_hovered = RwSignal::new(false);
     let zoom_level = RwSignal::new(1.0f64);
 
-    // Master server address & modal state
     let master_address = RwSignal::new(load_master_address());
     let is_master_modal_open = RwSignal::new(false);
     let reconnect_trigger = RwSignal::new(0u32);
 
-    // WebSocket state
     let is_connected = RwSignal::new(false);
     let command_sender = RwSignal::new(None::<UnboundedSender<ClientPacket>>);
     let sequence_id = Arc::new(AtomicU16::new(0));
     let logs = RwSignal::new(Vec::<String>::new());
 
-    // Domain data
     let current_game = RwSignal::new(Game::new(Discipline::Fiba5v5));
     let available_games = RwSignal::new(Vec::<Game>::new());
     let connected_devices = RwSignal::new(Vec::<Device>::new());
@@ -58,7 +52,6 @@ pub fn LegacyHmiView(
             .expect("valid browser DeviceConfig"),
     );
 
-    // Wi-Fi Config Modal state
     let is_wifi_modal_open = RwSignal::new(false);
     let wifi_target_ip = RwSignal::new("192.168.4.1".to_string());
     let wifi_modal_sn = RwSignal::new("sn-hmi-0000".to_string());
@@ -75,7 +68,6 @@ pub fn LegacyHmiView(
         });
     };
 
-    // Zooming logic: driven by macOS System Menu (Properties) and ⌘+/⌘-/⌘0
     let on_zoom_in = Callback::new(move |()| {
         zoom_level.update(|z| {
             *z = (*z + 0.1).min(1.75);
@@ -92,7 +84,6 @@ pub fn LegacyHmiView(
         zoom_level.set(1.0);
     });
 
-    // Window events, OS menu events and keyboard shortcuts (⌘+, ⌘-, ⌘0)
     Effect::new(move |_| {
         if let Some(window) = web_sys::window() {
             let on_keydown = {
@@ -126,14 +117,13 @@ pub fn LegacyHmiView(
                 .add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref());
             on_keydown.forget();
 
-            // Native Tauri Event Listeners (macOS System Menu)
             if let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
                 && let Ok(event_obj) = js_sys::Reflect::get(&tauri_obj, &JsValue::from_str("event"))
                 && let Ok(listen_fn) =
                     js_sys::Reflect::get(&event_obj, &JsValue::from_str("listen"))
                 && let Ok(func) = listen_fn.dyn_into::<js_sys::Function>()
             {
-                // OS Menu: Zoom In
+
                 let on_zin = {
                     let on_zoom_in = on_zoom_in;
                     Closure::<dyn FnMut(JsValue)>::new(move |_| {
@@ -147,7 +137,6 @@ pub fn LegacyHmiView(
                 );
                 on_zin.forget();
 
-                // OS Menu: Zoom Out
                 let on_zout = {
                     let on_zoom_out = on_zoom_out;
                     Closure::<dyn FnMut(JsValue)>::new(move |_| {
@@ -161,7 +150,6 @@ pub fn LegacyHmiView(
                 );
                 on_zout.forget();
 
-                // OS Menu: Zoom Reset
                 let on_zreset = {
                     let on_zoom_reset = on_zoom_reset;
                     Closure::<dyn FnMut(JsValue)>::new(move |_| {
@@ -178,7 +166,6 @@ pub fn LegacyHmiView(
         }
     });
 
-    // Background auto-reconnect timer and auto-discovery
     Effect::new(move |_| {
         async fn sleep_ms(millis: i32) {
             let promise = js_sys::Promise::new(&mut |resolve, _| {
@@ -197,7 +184,7 @@ pub fn LegacyHmiView(
                 sleep_ms(2500).await;
 
                 if !is_connected.get_untracked() {
-                    // If not connected yet in Tauri desktop environment, try auto-discovery if address is default
+
                     if check_discovery {
                         let current = master_address.get_untracked();
                         if (current == "127.0.0.1:3000" || current.is_empty())
@@ -216,7 +203,6 @@ pub fn LegacyHmiView(
                         }
                     }
 
-                    // Trigger reconnection attempt
                     reconnect_trigger.update(|n| *n = n.wrapping_add(1));
                 } else {
                     check_discovery = false;
@@ -225,7 +211,6 @@ pub fn LegacyHmiView(
         });
     });
 
-    // Reactive WebSocket connection lifecycle (reconnects whenever master_address or reconnect_trigger changes)
     Effect::new(move |_| {
         let _ = reconnect_trigger.get();
         let client_device = load_or_create_browser_device();
@@ -234,7 +219,6 @@ pub fn LegacyHmiView(
         let target_addr = master_address.get();
         let target_addr = target_addr.trim();
 
-        // Support formats like "127.0.0.1:3000", "ws://127.0.0.1:3000", "http://127.0.0.1:3000"
         let websocket_url = if target_addr.starts_with("ws://") || target_addr.starts_with("wss://")
         {
             if target_addr.ends_with("/ws") {
@@ -260,7 +244,6 @@ pub fn LegacyHmiView(
             let (packet_tx, mut packet_rx) = mpsc::unbounded::<ServerPacket>();
             let (command_tx, mut command_rx) = mpsc::unbounded::<ClientPacket>();
 
-            // On open
             {
                 let connected_clone = is_connected;
                 let command_tx_open = command_tx.clone();
@@ -279,7 +262,6 @@ pub fn LegacyHmiView(
                 onopen.forget();
             }
 
-            // On message
             {
                 let incoming_tx_message = incoming_tx.clone();
                 let onmessage = Closure::wrap(Box::new(move |event: MessageEvent| {
@@ -296,7 +278,6 @@ pub fn LegacyHmiView(
                 onmessage.forget();
             }
 
-            // On close
             {
                 let connected_clone = is_connected;
                 let devices_clone = connected_devices;
@@ -313,7 +294,6 @@ pub fn LegacyHmiView(
                 onclose.forget();
             }
 
-            // Outgoing WebSocket sender task
             {
                 let websocket_sender = websocket.clone();
                 wasm_bindgen_futures::spawn_local(async move {
@@ -328,7 +308,6 @@ pub fn LegacyHmiView(
                 });
             }
 
-            // Incoming server packet handler task
             {
                 let current_game_clone = current_game;
                 let games_state_clone = available_games;
@@ -450,7 +429,6 @@ pub fn LegacyHmiView(
                 });
             }
 
-            // Client loop
             {
                 let adapter = BrowserWebSocketAdapter::new(outgoing_tx, incoming_rx);
                 let transport = Transport::new(adapter, None);
@@ -498,7 +476,6 @@ pub fn LegacyHmiView(
         }
     });
 
-    // Helper for dispatching ClientPackets
     let send_client_packet = {
         let seq_arc = sequence_id.clone();
         Arc::new(move |event: ClientEvent, payload: [u8; DATA_SIZE]| {
@@ -572,9 +549,9 @@ pub fn LegacyHmiView(
             let id = format!("dummy-worker-{next_num:04}");
 
             if let Ok(dummy) = Device::try_new(DeviceType::Worker, &sn, &id) {
-                // Register via master websocket
+
                 send(ClientEvent::DeviceAssignGame, dummy.to_bytes());
-                // Immediately register locally so UI updates even if offline
+
                 connected_devices.update(|list| {
                     if !list.iter().any(|d| d.serial_number() == Ok(&sn)) {
                         list.push(dummy);
@@ -603,7 +580,6 @@ pub fn LegacyHmiView(
         });
     });
 
-    // Window drag and controls
     let on_start_drag = Callback::new(|event: web_sys::MouseEvent| {
         if event.buttons() == 1 {
             invoke_tauri_window_command("window_start_drag");
@@ -629,7 +605,6 @@ pub fn LegacyHmiView(
         invoke_tauri_window_command("window_toggle_maximize");
     });
 
-    // Master server modal callbacks
     let on_open_master_modal = Callback::new(move |()| {
         is_master_modal_open.set(true);
     });
@@ -644,7 +619,6 @@ pub fn LegacyHmiView(
         is_master_modal_open.set(false);
     });
 
-    // Wi-Fi dialog callbacks
     let on_open_wifi_setup = Callback::new(move |()| {
         add_log("[UI] Otwieranie konfiguracji Wi-Fi".to_string());
         wifi_target_ip.set("192.168.4.1".to_string());
@@ -695,7 +669,6 @@ pub fn LegacyHmiView(
         },
     );
 
-    // Dynamic background styling based on focus
     let root_bg_class = move || {
         if is_focused.get() {
             "bg-[#101318]/70 border-white/[0.12]"
@@ -743,7 +716,7 @@ pub fn LegacyHmiView(
             class=move || format!("w-screen h-screen overflow-hidden rounded-xl border {} transition-colors duration-200 flex text-white/90 select-none font-sans antialiased text-[13px]", root_bg_class())
             style=move || format!("zoom: {};", zoom_level.get())
         >
-            // Tree-based Sidebar (Games and Devices)
+
             <NavigationSidebar
                 is_focused=is_focused
                 is_lights_hovered=is_lights_hovered
@@ -768,7 +741,6 @@ pub fn LegacyHmiView(
                 on_back=on_back
             />
 
-            // Center Scoreboard and WebSocket Control View
             <MatchControlPanel
                 game=current_game.into()
                 is_connected=is_connected.into()
@@ -782,7 +754,6 @@ pub fn LegacyHmiView(
                 on_back=on_back
             />
 
-            // Right Inspector & Logs Panel
             <DeviceInspector
                 selected_game=current_game.into()
                 selected_device=selected_device
@@ -793,7 +764,6 @@ pub fn LegacyHmiView(
                 on_open_wifi_config=on_open_wifi_for_device
             />
 
-            // Master Server Address Config Modal
             <MasterServerModal
                 is_open=is_master_modal_open.into()
                 current_address=master_address.into()
@@ -801,7 +771,6 @@ pub fn LegacyHmiView(
                 on_save=on_save_master_address
             />
 
-            // Wi-Fi Config Modal (OTA UDP)
             <WifiConfigModal
                 is_open=is_wifi_modal_open.into()
                 on_close=on_close_wifi_modal

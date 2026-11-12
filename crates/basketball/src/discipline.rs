@@ -1,8 +1,5 @@
-//! Basketball discipline definitions and initial clock/quarter parameters.
-
 use crate::Quarter;
 
-/// Initial game parameters determined by a [`Discipline`].
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DisciplineConfig {
@@ -11,7 +8,6 @@ pub struct DisciplineConfig {
     pub clock_millis: u32,
 }
 
-/// Basketball discipline rule set.
 #[non_exhaustive]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +31,7 @@ impl TryFrom<u8> for Discipline {
 }
 
 impl Discipline {
-    /// Returns the [`DisciplineConfig`] for this discipline.
+
     #[must_use]
     pub fn config(&self) -> DisciplineConfig {
         match self {

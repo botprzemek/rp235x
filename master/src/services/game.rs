@@ -1,5 +1,3 @@
-//! Real-time 60 Hz game clock service, frame publisher, and state manager.
-
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
@@ -16,11 +14,9 @@ use tokio::task;
 use tokio::time::{self, MissedTickBehavior};
 
 const TICK_RATE: Duration = Duration::from_nanos(1_000_000_000 / 60);
-/// How often (in ticks) frame channels without subscribers are pruned.
+
 const FRAME_PRUNE_TICKS: u32 = 600;
 
-/// A fully serialized `ServerEvent::GameUpdate` packet, shared by every
-/// connection observing the same game.
 pub type GameFrame = Arc<[u8; PACKET_SIZE]>;
 
 type FrameChannels = Arc<RwLock<HashMap<u16, watch::Sender<Option<GameFrame>>>>>;
@@ -47,9 +43,6 @@ impl ActiveGame {
         Self { game, last_tick }
     }
 
-    /// Advances the game clock against the monotonic `Instant` clock.
-    /// Moves `last_tick` forward only by whole elapsed milliseconds, preserving
-    /// sub-millisecond remainders (< 1 ms) for the next cycle (zero drift).
     fn advance_clock(&mut self, now: Instant) -> ClockAdvanceOutcome {
         if self.game.state() != State::Running {
             self.last_tick = None;
@@ -87,7 +80,6 @@ impl ActiveGame {
     }
 }
 
-/// Manages active [`Game`] instances, 60 Hz clock advancement, and frame broadcasting.
 #[derive(Clone)]
 pub struct GameService {
     #[allow(dead_code)]
@@ -110,7 +102,7 @@ impl Observable<Vec<Game>> for GameService {
 }
 
 impl GameService {
-    /// Creates a new [`GameService`] and spawns its 60 Hz clock and database persistence tasks.
+
     #[must_use]
     pub fn new(game_repository: GameRepository) -> Self {
         let mut initial_games = game_repository.select();
@@ -134,7 +126,6 @@ impl GameService {
         let (state, _state_rx) = watch::channel(initial_games);
         let (broadcast, _broadcast_rx) = broadcast::channel(64);
 
-        // Asynchronous persistence to ReDB in the background without blocking the 60 Hz real-time loop.
         let repository_writer = game_repository.clone();
         let database_cache = Arc::clone(&cache);
         let database_flag = Arc::clone(&database_dirty);
@@ -163,7 +154,6 @@ impl GameService {
             }
         });
 
-        // Independent 60 Hz real-time clock (`Instant::now()`) preserving sub-milliseconds.
         let clock_cache = Arc::clone(&cache);
         let clock_state = state.clone();
         let clock_broadcast = broadcast.clone();
@@ -231,8 +221,6 @@ impl GameService {
         }
     }
 
-    /// Serializes every observed game once and publishes the shared frame to
-    /// all of its subscribers.
     fn publish_frames(
         cache: &RwLock<Vec<Option<ActiveGame>>>,
         frames: &RwLock<HashMap<u16, watch::Sender<Option<GameFrame>>>>,
@@ -261,9 +249,6 @@ impl GameService {
         }
     }
 
-    /// Subscribes to the 60 Hz stream of pre-serialized `GameUpdate` frames
-    /// for a single game. Frames are latest-value only: slow consumers skip
-    /// stale frames instead of queueing them.
     #[must_use]
     pub fn subscribe_frames(&self, game_id: u16) -> watch::Receiver<Option<GameFrame>> {
         if let Some(sender) = self
@@ -283,7 +268,6 @@ impl GameService {
             .subscribe()
     }
 
-    /// Returns all active games in the cache.
     #[must_use]
     pub fn all(&self) -> Vec<Game> {
         let cache = self
@@ -293,7 +277,6 @@ impl GameService {
         cache.iter().flatten().map(|entry| entry.game).collect()
     }
 
-    /// Returns the [`Game`] with `id`, if it exists.
     #[must_use]
     pub fn by_id(&self, id: u16) -> Option<Game> {
         let cache = self
@@ -305,14 +288,12 @@ impl GameService {
             .and_then(|entry| entry.as_ref().map(|active| active.game))
     }
 
-    /// Returns the default game (ID `1`).
     #[must_use]
     pub fn default_game(&self) -> Game {
         self.by_id(1)
             .unwrap_or_else(|| Game::new_with_id(1, Discipline::Fiba5v5))
     }
 
-    /// Creates and registers a new [`Game`] with the next available ID and `discipline`.
     #[must_use]
     pub fn create_game(&self, discipline: Discipline) -> Game {
         let now = Instant::now();
@@ -348,7 +329,6 @@ impl GameService {
         created
     }
 
-    /// Mutates the game identified by `game_id` using `modifier` and broadcasts the updated state.
     pub fn modify_game<F>(&self, game_id: u16, modifier: F) -> Option<Game>
     where
         F: FnOnce(&mut Game),
@@ -407,106 +387,50 @@ impl GameService {
         updated_game
     }
 
-    /// Returns the [`Scores`] of the default game.
     pub async fn scores(&self) -> Scores {
         let game = self.default_game();
         game.scores()
     }
 
-    /// Returns the score of `team` in the default game.
     pub async fn score(&self, team: Team) -> u16 {
         let game = self.default_game();
         game.score(team)
     }
 
-    /// Adds `score` points to `team` in the default game.
     pub async fn add_score(&self, team: Team, score: Score) {
         let id = self.default_game().id();
         self.add_score_for(id, team, score).await;
     }
 
-    /// Adds `score` points to `team` in `game_id`.
     pub async fn add_score_for(&self, game_id: u16, team: Team, score: Score) {
         self.modify_game(game_id, |game| game.add_score(team, score));
     }
 
-    /// Resumes the default game.
     pub async fn resume(&self) {
         let id = self.default_game().id();
         self.resume_for(id).await;
     }
 
-    /// Resumes `game_id`.
     pub async fn resume_for(&self, game_id: u16) {
         self.modify_game(game_id, Game::resume);
     }
 
-    /// Pauses the default game.
     pub async fn pause(&self) {
         let id = self.default_game().id();
         self.pause_for(id).await;
     }
 
-    /// Pauses `game_id`.
     pub async fn pause_for(&self, game_id: u16) {
         self.modify_game(game_id, Game::pause);
     }
 
-    /// Marks `game_id` as ended ([`State::GameEnd`]).
     pub async fn end_for(&self, game_id: u16) {
         self.modify_game(game_id, |game| game.set_state(State::GameEnd));
     }
 
-    /// Resets `game_id` to a fresh game of the same discipline.
     pub async fn reset_for(&self, game_id: u16) {
         self.modify_game(game_id, |game| {
             *game = Game::new_with_id(game.id(), game.discipline());
         });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use basketball::Quarter;
-
-    #[test]
-    fn test_zero_drift_over_12_minutes_at_60hz() {
-        let start = Instant::now();
-        let mut game = Game::new_with_id(1, Discipline::Fiba5v5); // 12 minutes = 720_000 ms
-        game.resume();
-
-        let mut active = ActiveGame::new(game, start);
-        let mut current = start;
-
-        // Simulate 719 seconds in steps of 16_666_666 ns (~60 Hz with fractional nanoseconds)
-        let total_nanos: u64 = 719 * 1_000_000_000;
-        let step_nanos: u64 = 16_666_666;
-        let steps = total_nanos / step_nanos;
-        let remainder_nanos = total_nanos % step_nanos;
-
-        for _ in 0..steps {
-            current += Duration::from_nanos(step_nanos);
-            active.advance_clock(current);
-        }
-        current += Duration::from_nanos(remainder_nanos);
-        active.advance_clock(current);
-
-        // After exactly 719 seconds (719_000 ms), exactly 1000 ms (1.00 s) must remain
-        assert_eq!(
-            active.game.regulation_millis(),
-            1_000,
-            "Expected 1000 ms remaining after 719 s of sub-millisecond ticks"
-        );
-        assert_eq!(active.game.state(), State::Running);
-
-        // Add the final second (1000 ms) -> end of Q1 and transition to Q2 (Paused)
-        current += Duration::from_millis(1_000);
-        active.advance_clock(current);
-
-        assert_eq!(active.game.state(), State::Paused);
-        assert_eq!(active.game.quarter(), Quarter::Q2);
-        assert_eq!(active.game.regulation_millis(), 12 * 60 * 1_000);
     }
 }

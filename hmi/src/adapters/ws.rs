@@ -1,5 +1,3 @@
-//! WebSocket connection adapter and browser device identity management.
-
 use core::net::SocketAddr;
 
 use futures::StreamExt;
@@ -10,10 +8,8 @@ use net::{ClientHandler, ClientPacket, Device, DeviceType, RawConnection, Server
 const SERIAL_NUMBER_STORAGE_KEY: &str = "hmi_serial_number";
 const MASTER_ADDRESS_STORAGE_KEY: &str = "hmi_master_address";
 
-/// Default Master address if none stored in LocalStorage.
 pub const DEFAULT_MASTER_ADDRESS: &str = "127.0.0.1:3000";
 
-/// Loads the configured Master address from LocalStorage or returns default.
 pub fn load_master_address() -> String {
     let storage = web_sys::window().and_then(|window| window.local_storage().ok().flatten());
     if let Some(store) = storage
@@ -23,7 +19,6 @@ pub fn load_master_address() -> String {
         return addr.trim().to_string();
     }
 
-    // Auto-detect host from window.location in browser mode
     if let Some(window) = web_sys::window()
         && let Ok(location) = window.location().host()
         && !location.is_empty()
@@ -36,7 +31,6 @@ pub fn load_master_address() -> String {
     DEFAULT_MASTER_ADDRESS.to_string()
 }
 
-/// Saves the Master address into LocalStorage.
 pub fn save_master_address(address: &str) {
     let storage = web_sys::window().and_then(|window| window.local_storage().ok().flatten());
     if let Some(store) = storage {
@@ -44,7 +38,6 @@ pub fn save_master_address(address: &str) {
     }
 }
 
-/// Loads an existing device identifier from LocalStorage or generates and persists a new one.
 pub fn load_or_create_browser_device() -> Device {
     let storage = web_sys::window().and_then(|window| window.local_storage().ok().flatten());
 
@@ -66,7 +59,6 @@ pub fn load_or_create_browser_device() -> Device {
         .expect("valid browser DeviceConfig")
 }
 
-/// Adapter bridging browser [`web_sys::WebSocket`] channels to [`RawConnection`].
 pub struct BrowserWebSocketAdapter {
     outgoing_tx: UnboundedSender<[u8; PACKET_SIZE]>,
     incoming_rx: UnboundedReceiver<[u8; PACKET_SIZE]>,
@@ -101,7 +93,6 @@ impl RawConnection for BrowserWebSocketAdapter {
     }
 }
 
-/// [`ClientHandler`] implementation that forwards received [`ServerPacket`]s to a channel.
 pub struct HmiClientHandler {
     packet_tx: UnboundedSender<ServerPacket>,
 }

@@ -1,5 +1,3 @@
-//! Core 1 executor and HUB75 BCM display refresh loop.
-
 #[cfg(feature = "rp235x")]
 use crate::core1::ScoreboardLayout;
 #[cfg(feature = "rp235x")]
@@ -31,16 +29,14 @@ use basketball::Scorable;
 #[cfg(not(feature = "rp235x"))]
 use hub75::{DisplayBuffer, RED};
 
-/// Static async executor for Core 1 on RP235x.
 #[cfg(feature = "rp235x")]
 pub static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
-/// Core 1 entry point.
 pub struct Core1;
 
 #[cfg(feature = "rp235x")]
 impl Core1 {
-    /// Initializes the Core 1 executor, spawns the HUB75 refresh task, and signals Core 0.
+
     pub fn entry(led: LedPeripherals) -> ! {
         let executor = Executor::new();
 
@@ -128,7 +124,7 @@ async fn task(_spawner: Spawner, peripherals: LedPeripherals) {
 
 #[cfg(not(feature = "rp235x"))]
 impl Core1 {
-    /// Linux entry point for Core 1 (HUB75 display rendering thread).
+
     pub fn entry() {
         println!("🚀 [Core 1 Thread] HUB75 Display Runner started");
         CORE1_READY_SIGNAL.signal();

@@ -1,5 +1,3 @@
-//! Dual-core RP235x / Linux firmware library / core modules.
-
 #![cfg_attr(feature = "rp235x", no_std)]
 
 pub mod core0;

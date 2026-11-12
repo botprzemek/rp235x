@@ -1,11 +1,8 @@
-//! RP235x GPIO peripheral bindings for [`LedOutputs`].
-
 use crate::{LedOutputs, OutputPin};
 
 use embassy_rp::gpio::{Level, Output};
 use embassy_rp::{Peri, peripherals};
 
-/// RP235x GPIO pins assigned to the HUB75 panel interface.
 #[non_exhaustive]
 pub struct LedPeripherals {
     pub pio: Peri<'static, peripherals::PIO1>,
@@ -30,7 +27,7 @@ pub struct LedPeripherals {
 }
 
 impl LedPeripherals {
-    /// Bundles the RP235x GPIO pins into [`LedPeripherals`].
+
     #[must_use]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -83,7 +80,7 @@ impl OutputPin for Output<'_> {
 }
 
 impl LedOutputs<Output<'static>> {
-    /// Initializes [`LedOutputs`] from RP235x [`LedPeripherals`].
+
     #[must_use]
     pub fn from_peripherals(peripherals: LedPeripherals) -> Self {
         Self::from(peripherals)

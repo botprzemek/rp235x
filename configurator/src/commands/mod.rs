@@ -1,5 +1,3 @@
-//! Subcommand definitions and dispatch for the `configurator` CLI.
-
 mod attach;
 mod cli;
 mod create;

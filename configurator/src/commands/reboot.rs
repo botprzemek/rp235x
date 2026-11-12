@@ -1,5 +1,3 @@
-//! `reboot` subcommand for resetting and restarting the connected RP2350 target.
-
 use std::time::Duration;
 
 use clap::Args;
@@ -7,24 +5,21 @@ use config::ConfigError;
 use config::probe_rs::Permissions;
 use config::probe_rs::probe::list::Lister;
 
-/// Arguments for the `reboot` subcommand.
 #[derive(Args)]
 #[command(about = "Reset and reboot the connected RP2350 worker target", long_about = None)]
 pub struct RebootArgs {
-    /// SWD clock speed in kHz (defaults to 5000 kHz = 5 MHz)
+
     #[arg(short, long, default_value_t = 5000)]
     pub speed: u32,
 
-    /// Halt core 0 after reset instead of resuming execution
     #[arg(long, default_value_t = false)]
     pub halt: bool,
 }
 
-/// Handler for the `reboot` subcommand.
 pub struct RebootCommand;
 
 impl RebootCommand {
-    /// Connects to the RP2350 target and triggers a core 0 reset and run.
+
     pub fn handle(args: &RebootArgs) -> Result<(), ConfigError> {
         let lister = Lister::new();
         let probes = lister.list_all();

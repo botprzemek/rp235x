@@ -1,5 +1,3 @@
-//! Native macOS right details inspector component showing selected Game or Device metadata & logs in Leptos.
-
 use basketball::{Game, Scorable};
 use config::DeviceConfig;
 use leptos::prelude::*;
@@ -15,11 +13,11 @@ pub fn DeviceInspector(
     on_disconnect_device: Callback<Device>,
     on_open_wifi_config: Callback<Device>,
 ) -> impl IntoView {
-    let active_tab = RwSignal::new("details"); // "details" or "logs"
+    let active_tab = RwSignal::new("details");
 
     view! {
         <aside class=move || format!("w-[240px] shrink-0 {} transition-colors duration-200 flex flex-col p-3 select-none overflow-hidden", inspector_bg_class.get())>
-            // Titlebar Header Region with macOS Segmented Control
+
             <div on:mousedown=move |e| on_start_drag.run(e) class="h-9 w-full shrink-0 flex items-center justify-between">
                 <div class="flex items-center p-0.5 bg-black/25 rounded-[6px] border border-white/[0.06] text-[11px] font-medium w-full">
                     <button
@@ -52,7 +50,7 @@ pub fn DeviceInspector(
 
                     view! {
                         <div class="flex-1 flex flex-col gap-2.5 overflow-y-auto mt-2">
-                            // Device Card if selected
+
                             {dev_opt.map(|dev| {
                                 let dev_copy = dev;
                                 let dev_for_wifi = dev;
@@ -103,7 +101,6 @@ pub fn DeviceInspector(
                                 }
                             })}
 
-                            // Game Details Card
                             <div class="bg-white/[0.04] backdrop-blur-md border border-white/[0.08] rounded-xl p-3 flex flex-col gap-2">
                                 <div>
                                     <h3 class="text-[12px] font-medium text-white/90">

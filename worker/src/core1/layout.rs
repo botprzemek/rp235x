@@ -1,10 +1,7 @@
-//! Fixed-capacity scoreboard text formatter for `no_std` HUB75 rendering on Core 1.
-
 use basketball::{Game, Scorable, Team};
 use heapless::String;
 use hub75::{Color, DisplayBuffer};
 
-/// Stack-allocated text buffers for formatting a [`Game`] onto a 64x32 HUB75 panel.
 pub struct ScoreboardLayout {
     home_buffer: String<8>,
     guest_buffer: String<8>,
@@ -19,7 +16,7 @@ impl Default for ScoreboardLayout {
 }
 
 impl ScoreboardLayout {
-    /// Creates a new empty [`ScoreboardLayout`].
+
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -30,8 +27,6 @@ impl ScoreboardLayout {
         }
     }
 
-    /// Formats `game` scores, quarter, and clock and renders them into `display`.
-    /// When `is_connected` is false, draws a subtle blinking/static connection dot to indicate offline state.
     pub fn render<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>(
         &mut self,
         display: &mut DisplayBuffer<WIDTH, HEIGHT, HALF_HEIGHT>,
@@ -64,8 +59,6 @@ impl ScoreboardLayout {
             &self.clock_buffer,
         );
 
-        // Visual indicator of network connection state:
-        // When disconnected/offline, turn on a 2x2 red pixel block in the top-right corner
         if !is_connected {
             display.set_pixel(WIDTH - 2, 1, hub75::RED);
             display.set_pixel(WIDTH - 1, 1, hub75::RED);
@@ -75,8 +68,6 @@ impl ScoreboardLayout {
         }
     }
 
-    /// Clears `display`, draws the scoreboard text fields, and prepares BCM bitplanes.
-    /// If `color` is specified, fills background with `color` and cuts out text glyphs as a mask (dark text on bright background).
     pub fn draw_text_layout<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>(
         &self,
         display: &mut DisplayBuffer<WIDTH, HEIGHT, HALF_HEIGHT>,
@@ -86,7 +77,7 @@ impl ScoreboardLayout {
         quarter: &str,
         clock: &str,
     ) {
-        // Background mask: fill with background color
+
         display.fill(color);
 
         let home_x = 3;
@@ -94,30 +85,11 @@ impl ScoreboardLayout {
         let quarter_x = 3;
         let clock_x = 22;
 
-        // Cut out text glyphs (mask / off pixels)
         display.draw_text_mask(home, home_x, 3);
         display.draw_text_mask(guest, guest_x, 3);
         display.draw_text_mask(quarter, quarter_x, 20);
         display.draw_text_mask(clock, clock_x, 20);
 
         display.prepare_bitplanes();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_scoreboard_render_pixels() {
-        let mut display = DisplayBuffer::<64, 32, 16>::default();
-        let mut layout = ScoreboardLayout::new();
-        let game = Game::empty();
-        layout.render(&mut display, &game, hub75::RED, true);
-
-        println!("home: '{}'", layout.home_buffer);
-        println!("guest: '{}'", layout.guest_buffer);
-        println!("quarter: '{}'", layout.quarter_buffer);
-        println!("clock: '{}'", layout.clock_buffer);
     }
 }

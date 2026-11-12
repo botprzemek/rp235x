@@ -1,5 +1,3 @@
-//! Concurrent inbound/outbound connection loops for WebSocket and packet transports.
-
 use core::time::Duration;
 use std::future;
 use std::sync::Arc;
@@ -17,15 +15,12 @@ use net::{
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::time::{self, MissedTickBehavior};
 
-/// Maximum number of queued control packets (acks, list updates) per connection.
-/// A peer that falls this far behind is considered dead and is disconnected.
 const OUTBOUND_CAPACITY: usize = 256;
-/// Coalescing interval for game/device list updates sent to browsers.
+
 const BROWSER_SYNC_INTERVAL: Duration = Duration::from_millis(100);
-/// Periodic refresh interval ensuring browsers are kept in sync even if packets were missed.
+
 const PERIODIC_SYNC_INTERVAL: Duration = Duration::from_secs(5);
 
-/// Connection state shared from the inbound to the outbound half.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Session {
     pub validated: bool,
@@ -35,12 +30,10 @@ pub struct Session {
 
 enum Outbound {
     Packet([u8; PACKET_SIZE]),
-    /// Resend the full game and device lists (sent after a browser handshake).
+
     BrowserResync,
 }
 
-/// [`PacketSender`] that enqueues packets for the outbound half without ever
-/// awaiting socket I/O.
 struct QueueSender {
     sender: mpsc::Sender<Outbound>,
     overflowed: bool,
@@ -60,7 +53,6 @@ impl PacketSender for QueueSender {
     }
 }
 
-/// Runs the concurrent inbound and outbound loops for a single client connection.
 pub async fn run<R, W>(receiver: R, sender: W, services: Arc<Services>)
 where
     R: PacketReceiver,
@@ -69,9 +61,6 @@ where
     let (outbound_tx, outbound_rx) = mpsc::channel(OUTBOUND_CAPACITY);
     let (session_tx, session_rx) = watch::channel(Session::default());
 
-    // Both halves are polled concurrently; a pending `send()` in the outbound
-    // half does not prevent the inbound half from making progress. The
-    // connection ends as soon as the inbound half finishes.
     tokio::select! {
         () = read_loop(receiver, outbound_tx, session_tx, Arc::clone(&services)) => {}
         () = write_loop(sender, outbound_rx, session_rx, services) => {}
@@ -107,8 +96,6 @@ async fn read_loop<R>(
                 }
             }
 
-            // Assignment is event driven: the device registry is only queried
-            // when an assignment for this device actually happens.
             result = game_assign_rx.recv() => {
                 match result {
                     Ok(assignment) if server.handler().is_device(&assignment.serial_number) => {
@@ -130,8 +117,7 @@ async fn read_loop<R>(
                                 ClientEvent::HandshakeRequest | ClientEvent::HandshakeHeartbeat
                             )
                         {
-                            // Publish the session before the resync request so
-                            // the outbound half already sees a browser session.
+
                             session_tx.send_if_modified(|session| replace(session, server.handler().session()));
                             server.transport_mut().sender_mut().push(Outbound::BrowserResync);
                         }
@@ -243,7 +229,6 @@ async fn write_loop<W>(
                     frame_rx = Some(services.game().subscribe_frames(next.game_id));
                 }
 
-                // If this is a newly validated browser session, immediately initialize watchers and sync state
                 if next.browser && !session.browser {
                     let games = game_rx.get_or_insert_with(|| services.game().watch());
                     let devices = devices_rx.get_or_insert_with(|| services.devices().watch());
@@ -304,13 +289,13 @@ async fn write_loop<W>(
             _ = periodic_sync_interval.tick(), if session.browser => {
                 if let Some(rx) = &mut game_rx {
                     let current_games = rx.borrow().clone();
-                    // Force re-announcing join/update events for all games
+
                     known_games.clear();
                     sync_games_to_browser(&mut sender, &mut known_games, current_games, &mut sequence_id).await;
                 }
                 if let Some(rx) = &mut devices_rx {
                     let current_devices = rx.borrow().clone();
-                    // Force re-announcing join/update events for all devices
+
                     known_devices.clear();
                     sync_devices_to_browser(&mut sender, &mut known_devices, current_devices, &mut sequence_id).await;
                 }
@@ -319,8 +304,6 @@ async fn write_loop<W>(
     }
 }
 
-/// Resolves when the optional watch receiver observes a change; pends forever
-/// when there is no receiver.
 async fn changed<T>(rx: &mut Option<watch::Receiver<T>>) -> Result<(), watch::error::RecvError> {
     match rx {
         Some(rx) => rx.changed().await,

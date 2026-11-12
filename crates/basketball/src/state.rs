@@ -1,6 +1,3 @@
-//! Lifecycle state of a basketball [`crate::Game`].
-
-/// Execution state of a basketball game clock and match.
 #[non_exhaustive]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

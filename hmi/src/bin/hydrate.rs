@@ -1,5 +1,3 @@
-//! Browser entry point for mounting the Leptos [`App`].
-
 use hmi::App;
 use leptos::mount::mount_to_body;
 use web_sys::console;

@@ -1,5 +1,3 @@
-//! `flash` subcommand for flashing an ELF or binary firmware file onto the RP2350 device.
-
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -12,27 +10,23 @@ use config::probe_rs::flashing::{
 };
 use config::probe_rs::probe::list::Lister;
 
-/// Arguments for the `flash` subcommand.
 #[derive(Args)]
 #[command(about = "Flash an ELF or binary firmware file onto the connected RP2350 target", long_about = None)]
 pub struct FlashArgs {
-    /// Path to the firmware file (ELF, bin, uf2, or hex)
+
     pub path: PathBuf,
 
-    /// SWD clock speed in kHz (defaults to 5000 kHz = 5 MHz)
     #[arg(short, long, default_value_t = 5000)]
     pub speed: u32,
 
-    /// Reset and resume core 0 after flashing
     #[arg(short, long, default_value_t = true)]
     pub run: bool,
 }
 
-/// Handler for the `flash` subcommand.
 pub struct FlashCommand;
 
 impl FlashCommand {
-    /// Flashes the firmware file at `args.path` to the connected RP2350 target.
+
     pub fn handle(args: &FlashArgs) -> Result<(), ConfigError> {
         if !args.path.exists() {
             eprintln!("Error: file not found: {}", args.path.display());

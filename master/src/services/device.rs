@@ -1,5 +1,3 @@
-//! Service for tracking connected devices, game assignments, and disconnections.
-
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -13,14 +11,12 @@ use tokio::sync::{broadcast, watch};
 use tokio::task;
 use tokio::time::{self, MissedTickBehavior};
 
-/// Notification emitted when a device is assigned to a game.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceGameAssignment {
     pub serial_number: String,
     pub game_id: u16,
 }
 
-/// Manages connected [`Device`]s, their game assignments, and asynchronous persistence.
 #[derive(Clone)]
 pub struct DeviceService {
     #[allow(dead_code)]
@@ -43,7 +39,7 @@ impl Observable<Vec<Device>> for DeviceService {
 }
 
 impl DeviceService {
-    /// Creates a new [`DeviceService`] and spawns its background database writer task.
+
     #[must_use]
     pub fn new(device_repository: DeviceRepository) -> Self {
         device_repository.upsert(&[]);
@@ -53,7 +49,6 @@ impl DeviceService {
         let (game_assign_tx, _game_assign_rx) = broadcast::channel(64);
         let assigned_games = Arc::new(RwLock::new(HashMap::new()));
 
-        // Asynchronous persistence to ReDB in the background without blocking Tokio registration tasks.
         let repository_writer = device_repository.clone();
         tokio::spawn(async move {
             let mut database_interval = time::interval(Duration::from_millis(250));
@@ -83,13 +78,11 @@ impl DeviceService {
         }
     }
 
-    /// Returns a snapshot of all currently registered devices.
     #[must_use]
     pub fn all(&self) -> Vec<Device> {
         self.state.borrow().clone()
     }
 
-    /// Returns the assigned game ID for the device with `serial_number`, if any.
     #[must_use]
     pub fn game_id_by_serial(&self, serial_number: &str) -> Option<u16> {
         if let Some(&game_id) = self
@@ -109,19 +102,16 @@ impl DeviceService {
             .map(Device::game_id)
     }
 
-    /// Subscribes to device disconnection requests by serial number.
     #[must_use]
     pub fn subscribe_disconnect(&self) -> broadcast::Receiver<String> {
         self.disconnect_tx.subscribe()
     }
 
-    /// Subscribes to device-to-game assignment updates.
     #[must_use]
     pub fn subscribe_game_assign(&self) -> broadcast::Receiver<DeviceGameAssignment> {
         self.game_assign_tx.subscribe()
     }
 
-    /// Assigns the device with `serial_number` to `game_id` and broadcasts the update.
     pub fn assign_game_by_serial(&self, serial_number: &str, game_id: u16) -> Option<Device> {
         self.assigned_games
             .write()
@@ -155,7 +145,6 @@ impl DeviceService {
         updated_device
     }
 
-    /// Validates `device` and registers or updates it in the active device list.
     pub fn validate_and_register(&self, device: Device) -> Result<Device, ConfigError> {
         device.validate()?;
 
@@ -186,14 +175,12 @@ impl DeviceService {
         Ok(device)
     }
 
-    /// Unregisters `device` from the active device list.
     pub fn unregister(&self, device: &Device) {
         if let Ok(serial_number) = device.serial_number() {
             self.remove_by_serial(serial_number);
         }
     }
 
-    /// Removes the device with `serial_number` and notifies listeners to close its connection.
     pub fn disconnect_by_serial(&self, serial_number: &str) {
         self.remove_by_serial(serial_number);
         let _ = self.disconnect_tx.send(serial_number.to_string());

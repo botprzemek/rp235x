@@ -1,5 +1,3 @@
-//! Flash memory reader and writer for [`Config`].
-
 #[cfg(feature = "std")]
 use std::eprintln;
 #[cfg(feature = "std")]
@@ -14,20 +12,17 @@ use probe_rs::flashing::DownloadOptions;
 #[cfg(feature = "std")]
 use probe_rs::probe::list::Lister;
 
-/// Reads a [`Config`] from target flash memory.
 pub trait FlashReader<'flash> {
-    /// Reads and verifies the [`Config`] from flash memory.
+
     #[cfg(feature = "std")]
     fn read() -> Result<Config, ConfigError>;
 
-    /// Reads and verifies a zero-copy reference to [`Config`] in memory-mapped flash.
     #[cfg(not(feature = "std"))]
     fn read() -> Result<&'flash Config, ConfigError>;
 }
 
-/// Writes a [`Config`] to target flash memory over a debug probe.
 pub trait FlashWriter {
-    /// Flashes `self` onto the connected RP2350 target.
+
     #[cfg(feature = "std")]
     fn write(self);
 }
@@ -66,9 +61,7 @@ impl<'flash> FlashReader<'flash> for Config {
 
     #[cfg(not(feature = "std"))]
     fn read() -> Result<&'flash Self, ConfigError> {
-        // SAFETY: `CONFIG_ADDR` is the reserved flash partition address on RP235x mapped into the
-        // address space with at least `CONFIG_SIZE` readable bytes.
-        // Justification: Hardware memory-mapped flash access on bare-metal RP235x.
+
         unsafe {
             let bytes = core::slice::from_raw_parts(CONFIG_ADDR as *const u8, CONFIG_SIZE);
             let raw = Config::<Raw>::from_bytes(bytes)?;

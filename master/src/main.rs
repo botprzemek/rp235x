@@ -1,5 +1,3 @@
-//! Entry point for the `master` server binary.
-
 use master::ApplicationBuilder;
 
 #[tokio::main]

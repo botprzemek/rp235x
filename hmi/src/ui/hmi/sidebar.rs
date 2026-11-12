@@ -1,5 +1,3 @@
-//! Native macOS sidebar with tree-view for Games and Devices in Leptos (pure typography, no icons/emojis).
-
 use crate::ui::traffic_lights::{CloseButton, MaximizeButton, MinimizeButton};
 
 use basketball::{Game, Scorable};
@@ -62,7 +60,7 @@ pub fn NavigationSidebar(
     view! {
         <aside class=move || format!("w-[240px] shrink-0 flex flex-col justify-between border-r border-white/[0.08] {} transition-colors duration-200 select-none overflow-hidden", sidebar_bg_class.get())>
             <div class="flex-1 flex flex-col min-h-0">
-                // Traffic Lights Region
+
                 <div
                     on:mousedown=move |e| on_start_drag.run(e)
                     on:mouseenter=move |_| is_lights_hovered.set(true)
@@ -107,7 +105,6 @@ pub fn NavigationSidebar(
                         </button>
                     })}
 
-                    // Quick create buttons
                     <div class="flex items-center gap-1.5">
                         <button
                             on:mousedown=move |e| stop_propagation.run(e)
@@ -129,7 +126,6 @@ pub fn NavigationSidebar(
                     </div>
                 </div>
 
-                // Master Server Address Bar & Setup Button
                 <div class="px-2.5 py-1.5 border-b border-white/[0.06] bg-black/15 flex items-center justify-between text-[11px]">
                     <div
                         on:click=on_master_click
@@ -154,7 +150,6 @@ pub fn NavigationSidebar(
                     </button>
                 </div>
 
-                // Sidebar Header Title & Status
                 <div class="px-3 pt-2.5 pb-1 flex items-center justify-between text-white/50 text-[11px] font-medium tracking-wide uppercase">
                     <span>{"Serwer Master"}</span>
                     <span class=move || format!(
@@ -165,9 +160,8 @@ pub fn NavigationSidebar(
                     </span>
                 </div>
 
-                // Tree View Content
                 <div class="flex-1 px-2 py-1 space-y-3 overflow-y-auto min-h-0">
-                    // ================= GAMES SECTION =================
+
                     <div>
                         <div
                             on:click=toggle_games
@@ -219,7 +213,6 @@ pub fn NavigationSidebar(
                         </Show>
                     </div>
 
-                    // ================= DEVICES SECTION =================
                     <div>
                         <div
                             on:click=toggle_devices
@@ -302,7 +295,6 @@ pub fn NavigationSidebar(
                 </div>
             </div>
 
-            // Bottom Profile / Wi-Fi OTA button
             <div class="p-2.5 border-t border-white/[0.06] flex items-center justify-between text-white/50 gap-2">
                 <button
                     on:click=move |_| on_open_wifi_setup.run(())

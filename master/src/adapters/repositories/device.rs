@@ -1,12 +1,9 @@
-//! ReDB-backed repository for [`Device`] records.
-
 use crate::adapters::data::{DEVICES_TABLE, ReDBProvider};
 use crate::adapters::repositories::Repository;
 
 use config::DeviceConfig;
 use net::Device;
 
-/// Persistence adapter for [`Device`] records in ReDB.
 #[derive(Clone)]
 pub struct DeviceRepository {
     database: ReDBProvider,
@@ -69,7 +66,7 @@ impl Repository<[Device]> for DeviceRepository {
 }
 
 impl DeviceRepository {
-    /// Creates a new [`DeviceRepository`] backed by `database`.
+
     #[must_use]
     pub fn new(database: ReDBProvider) -> Self {
         Self { database }

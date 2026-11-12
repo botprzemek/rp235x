@@ -1,5 +1,3 @@
-//! Diagnostic printing for [`Config`].
-
 #[cfg(feature = "std")]
 use std::{format, println};
 
@@ -12,9 +10,8 @@ use crate::{Config, ConfigError};
 #[cfg(all(feature = "defmt", not(feature = "std")))]
 use defmt::info;
 
-/// Formats and outputs a [`Config`] to the console or `defmt` logger.
 pub trait Print {
-    /// Outputs the configuration details.
+
     fn print(&self) -> Result<(), ConfigError>;
 }
 

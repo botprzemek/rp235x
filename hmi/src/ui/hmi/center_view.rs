@@ -1,5 +1,3 @@
-//! Native macOS center control component with live scoreboard and WebSocket controls in Leptos.
-
 use crate::ui::scoreboard::Scoreboard;
 
 use basketball::{Game, Quarter, Scorable, State as GameState};
@@ -20,7 +18,7 @@ pub fn MatchControlPanel(
     on_assign_device_game: Callback<(Device, u16)>,
     #[prop(optional)] on_back: Option<Callback<()>>,
 ) -> impl IntoView {
-    let _ = on_disconnect_device; // Reserved for device management
+    let _ = on_disconnect_device;
 
     let scores = move || game.get().scores();
     let regulation_time = move || game.get().regulation_time();
@@ -87,7 +85,7 @@ pub fn MatchControlPanel(
 
     view! {
         <main class=move || format!("flex-1 flex flex-col justify-between {} transition-colors duration-200 border-r border-white/[0.08] min-w-0 overflow-y-auto select-none", main_bg_class.get())>
-            // Native macOS Window Header Bar
+
             <header
                 on:mousedown=move |e| on_start_drag.run(e)
                 class="flex items-center justify-between px-5 pt-2.5 pb-2 shrink-0 border-b border-white/[0.04]"
@@ -147,9 +145,8 @@ pub fn MatchControlPanel(
                 </div>
             </header>
 
-            // Main Interactive Content
             <div class="flex-1 p-5 flex flex-col items-center justify-between gap-5 overflow-y-auto">
-                // Live Scoreboard
+
                 <div class="w-full flex justify-center scale-95 transition-transform">
                     {move || view! {
                         <Scoreboard
@@ -168,14 +165,12 @@ pub fn MatchControlPanel(
                     }}
                 </div>
 
-                // Control Card
                 <div class="w-full max-w-[620px] bg-white/[0.04] border border-white/[0.08] backdrop-blur-md rounded-xl p-3.5 flex flex-col gap-3 shadow-lg">
                     <div class="flex items-center justify-between text-[11px] text-white/50 px-0.5">
                         <span class="font-medium text-white/70">{"Sterowanie czasem i punktacją"}</span>
                         <span class="text-[10px] text-white/40 font-mono">{"WebSocket"}</span>
                     </div>
 
-                    // Timer & State Buttons
                     <div class="grid grid-cols-4 gap-2">
                         <button
                             disabled=move || !is_connected.get()
@@ -207,9 +202,8 @@ pub fn MatchControlPanel(
                         </button>
                     </div>
 
-                    // Scoring Buttons Row (Home vs Away)
                     <div class="grid grid-cols-2 gap-3 pt-2 border-t border-white/[0.06]">
-                        // Home Scores
+
                         <div class="flex flex-col gap-1">
                             <span class="text-[11px] font-medium text-white/45 px-0.5">{"Gospodarze"}</span>
                             <div class="grid grid-cols-3 gap-1.5">
@@ -237,7 +231,6 @@ pub fn MatchControlPanel(
                             </div>
                         </div>
 
-                        // Away Scores
                         <div class="flex flex-col gap-1">
                             <span class="text-[11px] font-medium text-white/45 px-0.5">{"Goście"}</span>
                             <div class="grid grid-cols-3 gap-1.5">
@@ -267,7 +260,6 @@ pub fn MatchControlPanel(
                     </div>
                 </div>
 
-                // Quick Worker Assignment Section
                 {move || {
                     let current_game_id = game.get().id();
                     let workers: Vec<Device> = devices.get()

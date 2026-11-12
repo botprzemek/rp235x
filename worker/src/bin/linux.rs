@@ -1,10 +1,3 @@
-//! Linux (aarch64 / desktop) worker binary.
-//!
-//! Dual-core execution of RP235x scoreboard worker on Linux:
-//! - Core 0 thread: State machine boot, sync, and UDP networking loop.
-//! - Core 1 thread: HUB75 ScoreboardLayout rendering and local clock interpolation at 60 Hz.
-//! - Shared Game State between cores via thread-safe synchronization.
-
 use worker::core0::Core0;
 use worker::core1::Core1;
 

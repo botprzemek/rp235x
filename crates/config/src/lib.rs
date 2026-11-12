@@ -1,5 +1,3 @@
-//! Configuration management, cryptographic verification, and flash/file storage for RP235x.
-
 #![no_std]
 
 #[cfg(feature = "std")]

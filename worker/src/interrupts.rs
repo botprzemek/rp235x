@@ -1,5 +1,3 @@
-//! Hardware interrupt bindings for DMA, PIO, and TRNG peripherals on RP235x.
-
 use embassy_rp::peripherals::{DMA_CH0, DMA_CH1, PIO0, PIO1, TRNG};
 use embassy_rp::{bind_interrupts, dma, pio, trng};
 

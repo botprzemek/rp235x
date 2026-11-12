@@ -1,5 +1,3 @@
-//! Application services for managing games and connected devices.
-
 mod container;
 mod device;
 mod game;

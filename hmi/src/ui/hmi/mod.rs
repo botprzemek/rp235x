@@ -1,5 +1,3 @@
-//! UI components for scoreboard, match control, and device management.
-
 pub mod center_view;
 pub mod inspector;
 pub mod legacy;

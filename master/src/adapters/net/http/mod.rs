@@ -1,5 +1,3 @@
-//! HTTP and WebSocket server module.
-
 mod driver;
 mod handlers;
 

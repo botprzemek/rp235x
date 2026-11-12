@@ -1,5 +1,3 @@
-//! Utility script for writing CYW43 NVRAM binary blobs.
-
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 

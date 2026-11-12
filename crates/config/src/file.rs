@@ -1,5 +1,3 @@
-//! File readers and writers for JSON and encrypted binary [`Config`] files.
-
 #[cfg(feature = "serde")]
 use std::fs;
 use std::fs::File;
@@ -15,22 +13,19 @@ use aes_gcm::aead::{Aead, Generate};
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier};
 
-/// Reads a [`Config`] from a JSON file on disk.
 #[cfg(feature = "serde")]
 pub trait JsonReader {
-    /// Reads and validates a [`Config`] from the JSON file at `path`.
+
     fn read(path: &Path) -> Result<Config, ConfigError>;
 }
 
-/// Reads an encrypted and signed [`Config`] from a binary file on disk.
 pub trait BinReader {
-    /// Reads, verifies, and decrypts a [`Config`] from the binary file at `path`.
+
     fn read(path: &Path) -> Result<Config, ConfigError>;
 }
 
-/// Encrypts, signs, and writes a [`Config`] to a binary file on disk.
 pub trait BinWriter {
-    /// Encrypts, signs, and writes `self` to `path`.
+
     fn write(&self, path: &Path) -> Result<(), ConfigError>;
 }
 

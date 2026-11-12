@@ -1,5 +1,3 @@
-//! Repository abstractions and concrete persistence implementations.
-
 mod device;
 mod game;
 mod registry;

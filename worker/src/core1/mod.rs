@@ -1,5 +1,3 @@
-//! Core 1 HUB75 LED matrix rendering loop and layout formatting.
-
 pub mod entry;
 mod layout;
 #[cfg(not(feature = "rp235x"))]

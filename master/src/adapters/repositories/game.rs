@@ -1,11 +1,8 @@
-//! ReDB-backed repository for [`Game`] records.
-
 use crate::adapters::data::{GAME_TABLE, ReDBProvider};
 use crate::adapters::repositories::Repository;
 
 use basketball::Game;
 
-/// Persistence adapter for [`Game`] records in ReDB.
 #[derive(Clone)]
 pub struct GameRepository {
     database: ReDBProvider,
@@ -77,7 +74,7 @@ impl Repository<[Game]> for GameRepository {
 }
 
 impl GameRepository {
-    /// Creates a new [`GameRepository`] backed by `database`.
+
     #[must_use]
     pub fn new(database: ReDBProvider) -> Self {
         Self { database }

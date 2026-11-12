@@ -1,5 +1,3 @@
-//! CYW43439 Wi-Fi chip initialization and PIO SPI runner task.
-
 use core::hint;
 use core::mem;
 
@@ -17,14 +15,12 @@ use static_cell::StaticCell;
 type Runner<'driver> =
     cyw43::Runner<'driver, SpiBus<Output<'driver>, PioSpi<'driver, peripherals::PIO0, 0>>>;
 
-/// Initializer for the CYW43 wireless driver, control handle, and background runner.
 pub struct Cyw43Driver {
     pub net_driver: NetDriver<'static>,
     pub control: Control<'static>,
     pub runner: Runner<'static>,
 }
 
-/// CYW43 hardware initialization helper.
 pub struct Cyw43;
 
 static WIFI_STATE: StaticCell<State> = StaticCell::new();
@@ -38,7 +34,7 @@ const NVRAM_ADDR: usize = 0x1025_0000 ^ NVRAM_MASK;
 const NVRAM_LEN: usize = 742;
 
 impl Cyw43 {
-    /// Initializes the CYW43 chip over PIO SPI using firmware and NVRAM stored in flash.
+
     pub async fn init(peripherals: NetPeripherals) -> Cyw43Driver {
         let state = WIFI_STATE.init(State::new());
 
@@ -81,9 +77,7 @@ impl Cyw43 {
         );
 
         let pointer = hint::black_box(address as *const Aligned<A4, [u8; FIRMWARE_LEN]>);
-        // SAFETY: `address` is 4-byte aligned (checked above) and points to the CYW43 firmware blob
-        // flashed at `0x1020_0000` with length `FIRMWARE_LEN`.
-        // Justification: Zero-copy access to memory-mapped XIP flash on RP235x.
+
         unsafe { &*pointer }
     }
 
@@ -97,14 +91,11 @@ impl Cyw43 {
         );
 
         let pointer = hint::black_box(address as *const Aligned<A4, [u8; NVRAM_LEN]>);
-        // SAFETY: `address` is 4-byte aligned (checked above) and points to the CYW43 NVRAM blob
-        // flashed at `0x1025_0000` with length `NVRAM_LEN`.
-        // Justification: Zero-copy access to memory-mapped XIP flash on RP235x.
+
         unsafe { &*pointer }
     }
 }
 
-/// Background Embassy task driving the CYW43 PIO SPI bus.
 #[embassy_executor::task]
 pub async fn cyw43_task(runner: Runner<'static>) -> ! {
     runner.run().await

@@ -1,9 +1,6 @@
-//! Adapter for Tauri window management and Tauri IPC commands.
-
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
-/// Invokes a zero-argument Tauri command on the main window.
 pub fn invoke_tauri_window_command(cmd: &'static str) {
     if let Some(window) = web_sys::window()
         && let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
@@ -22,7 +19,6 @@ pub fn invoke_tauri_window_command(cmd: &'static str) {
     )));
 }
 
-/// Invokes Tauri `discover_master` to search for Master server via UDP broadcast.
 pub async fn invoke_discover_master(timeout_secs: Option<u64>) -> Result<String, String> {
     if let Some(window) = web_sys::window()
         && let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
@@ -58,11 +54,11 @@ pub async fn invoke_discover_master(timeout_secs: Option<u64>) -> Result<String,
             Err("Failed to acquire Promise".to_string())
         }
     } else {
-        // Fallback for pure browser mode without Tauri IPC
+
         Err("Tryb przeglądarki bez IPC Tauri".to_string())
     }
 }
-/// Invokes Tauri `send_device_config` to transmit UDP OTA Wi-Fi configuration.
+
 pub async fn invoke_send_device_config(
     target_ip: String,
     serial_number: String,

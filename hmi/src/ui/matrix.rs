@@ -1,5 +1,3 @@
-//! HUB75 matrix simulator component in Leptos.
-
 use leptos::prelude::*;
 
 #[component]

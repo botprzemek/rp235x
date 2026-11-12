@@ -1,17 +1,9 @@
-//! Payload data models for device registration and handshakes.
+mod config;
+mod device;
+mod handshake;
+mod heartbeat;
 
-pub mod config_packet;
-pub mod config_payload;
-pub mod device;
-pub mod handshake;
-pub mod handshake_ack;
-pub mod heartbeat;
-pub mod heartbeat_ack;
-
-pub use config_packet::DeviceConfigPacket;
-pub use config_payload::DeviceConfigPayload;
+pub use config::DeviceConfig;
 pub use device::{Device, DeviceType};
-pub use handshake::Handshake;
-pub use handshake_ack::HandshakeAck;
-pub use heartbeat::Heartbeat;
-pub use heartbeat_ack::HeartbeatAck;
+pub use handshake::{Handshake, HandshakeAck};
+pub use heartbeat::{Heartbeat, HeartbeatAck};

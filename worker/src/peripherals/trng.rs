@@ -1,17 +1,14 @@
-//! Hardware True Random Number Generator (TRNG) peripheral wrapper.
-
 use crate::interrupts::Irqs;
 
 use embassy_rp::trng::{self, Trng};
 use embassy_rp::{Peri, peripherals};
 
-/// RP235x TRNG peripheral bundle.
 pub struct TrngPeripherals {
     pub trng: Peri<'static, peripherals::TRNG>,
 }
 
 impl TrngPeripherals {
-    /// Initializes the hardware TRNG and generates an 8-byte random seed.
+
     pub async fn init(peripherals: Self) -> [u8; 8] {
         let config = {
             let mut config = trng::Config::default();

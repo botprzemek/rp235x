@@ -1,12 +1,9 @@
-//! Native macOS/Linux UI for HMI with Leptos architecture.
-
 use crate::ui::hmi::LegacyHmiView;
 use crate::ui::traffic_lights::NavigationBar;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 
-/// View state switching between the telemetry/idle view and the legacy HMI match control view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ViewMode {
     #[default]
@@ -19,7 +16,6 @@ pub fn App() -> impl IntoView {
     let is_focused = RwSignal::new(true);
     let view_mode = RwSignal::new(ViewMode::Minimal);
 
-    // Listen to focus changes (both DOM window events and Tauri custom events)
     Effect::new(move |_| {
         if let Some(window) = web_sys::window() {
             let on_focus = Closure::<dyn FnMut()>::new(move || {
@@ -87,24 +83,20 @@ pub fn App() -> impl IntoView {
                     />
 
                     <div class="flex-1 flex flex-col items-center justify-center gap-8 relative overflow-hidden">
-                        // Background ambient pulse glow
+
                         <div class="absolute w-72 h-72 rounded-full bg-gradient-to-tr from-[#FF6435]/15 via-amber-500/10 to-indigo-500/10 blur-3xl pointer-events-none animate-pulse-ring"></div>
 
-                        // Central orbital animation
                         <div class="relative w-36 h-36 flex items-center justify-center animate-float">
-                            // Outer static and dashed rotating orbit rings
+
                             <div class="absolute inset-0 rounded-full border border-neutral-300 dark:border-white/10"></div>
                             <div class="absolute inset-0 rounded-full border border-dashed border-neutral-400/40 dark:border-white/20 animate-orbit"></div>
 
-                            // Middle accented rotating arc
                             <div class="absolute inset-3 rounded-full border-2 border-transparent border-t-[#FF6435] border-r-[#FF6435]/40 animate-orbit-rev"></div>
 
-                            // Inner counter-rotating ring with tracking beacon
                             <div class="absolute inset-6 rounded-full border border-neutral-300 dark:border-white/15 animate-orbit">
                                 <span class="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-[#FF6435] shadow-[0_0_8px_#FF6435]"></span>
                             </div>
 
-                            // Center glowing pulsing core
                             <div class="relative flex items-center justify-center">
                                 <div class="absolute w-8 h-8 rounded-full bg-[#FF6435]/25 animate-ping"></div>
                                 <div class="w-6 h-6 rounded-full bg-gradient-to-br from-[#FF6435] to-[#e04b1e] shadow-lg shadow-[#FF6435]/50 flex items-center justify-center">
@@ -113,7 +105,6 @@ pub fn App() -> impl IntoView {
                             </div>
                         </div>
 
-                        // Animated telemetry bars and indicator label
                         <div class="flex flex-col items-center gap-3 relative z-10">
                             <div class="flex items-center gap-1.5 h-7">
                                 <span class="w-1 rounded-full bg-[#FF6435]/70 animate-bar-1"></span>
@@ -128,7 +119,6 @@ pub fn App() -> impl IntoView {
                             </div>
                         </div>
 
-                        // Central action button navigating to Old HMI
                         <button
                             type="button"
                             on:click=move |_| view_mode.set(ViewMode::OldHmi)

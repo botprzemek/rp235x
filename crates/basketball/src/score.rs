@@ -1,8 +1,5 @@
-//! Basketball scoring values and [`Scorable`] trait.
-
 use crate::Team;
 
-/// Points awarded for a single scoring play.
 #[non_exhaustive]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,7 +13,6 @@ pub enum Score {
     FieldGoal3 = 3,
 }
 
-/// Home and away team scores.
 #[non_exhaustive]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Scores {
@@ -24,15 +20,12 @@ pub struct Scores {
     pub away: u16,
 }
 
-/// Interface for entities that track team scores.
 pub trait Scorable {
-    /// Adds `score` points to `team`.
+
     fn add_score(&mut self, team: Team, score: Score);
 
-    /// Returns the current score of `team`.
     fn score(&self, team: Team) -> u16;
 
-    /// Returns both home and away [`Scores`].
     fn scores(&self) -> Scores;
 }
 

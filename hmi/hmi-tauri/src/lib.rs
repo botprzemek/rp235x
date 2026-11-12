@@ -1,10 +1,9 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use std::net::UdpSocket;
 use std::time::{Duration, Instant};
 
 use net::event::{ClientEvent, ServerEvent};
 use net::layout::PACKET_SIZE;
-use net::{ClientPacket, Device, DeviceConfigPacket, DeviceType, ServerPacket};
+use net::{ClientPacket, Device, DeviceConfig, DeviceType, ServerPacket};
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
@@ -121,9 +120,8 @@ fn send_device_config(
     wifi_ssid: String,
     wifi_password: String,
 ) -> Result<String, String> {
-    let packet =
-        DeviceConfigPacket::try_new(&serial_number, &device_id, &wifi_ssid, &wifi_password)
-            .map_err(|e| format!("Błąd parametrów: {:?}", e))?;
+    let packet = DeviceConfig::try_new(&serial_number, &device_id, &wifi_ssid, &wifi_password)
+        .map_err(|e| format!("Błąd parametrów: {:?}", e))?;
 
     let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
     socket
@@ -141,7 +139,7 @@ fn send_device_config(
         .map_err(|e| format!("Błąd wysyłania pakietu UDP: {}", e))?;
 
     let mut buf = [0u8; PACKET_SIZE];
-    // Wait for Ack / Success
+
     let (n, _) = socket
         .recv_from(&mut buf)
         .map_err(|e| format!("Brak odpowiedzi od urządzenia (timeout): {}", e))?;
@@ -155,7 +153,7 @@ fn send_device_config(
 
     match server_packet.event() {
         ServerEvent::DeviceConfigAck => {
-            // Also try to read the next packet which should be Success
+
             let _ = socket.set_read_timeout(Some(Duration::from_millis(2000)));
             if let Ok((n2, _)) = socket.recv_from(&mut buf) {
                 if n2 == PACKET_SIZE {
@@ -199,7 +197,7 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             {
-                // Native macOS Application Menu
+
                 let app_submenu = SubmenuBuilder::new(app, "HMI")
                     .about(None)
                     .separator()

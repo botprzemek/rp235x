@@ -1,12 +1,9 @@
-//! Command-line interface for creating, verifying, viewing, and flashing RP235x configurations.
-
 mod commands;
 
 use crate::commands::Commands;
 
 use clap::Parser;
 
-/// Top-level CLI parser for the `configurator` binary.
 #[derive(Parser)]
 #[command(name = "configurator")]
 #[command(about = "RP235x device configuration tool")]
@@ -19,7 +16,7 @@ pub struct Cli {
 }
 
 impl Cli {
-    /// Executes the selected CLI subcommand.
+
     pub fn run(self) {
         let error = match self.command.run() {
             Ok(()) => return,

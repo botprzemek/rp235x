@@ -1,6 +1,3 @@
-//! Core 0 executor and state machine entry task.
-//!
-
 #[cfg(feature = "rp235x")]
 use crate::peripherals::{NetPeripherals, TrngPeripherals};
 #[cfg(feature = "rp235x")]
@@ -48,16 +45,14 @@ use tokio::net::UdpSocket;
 #[cfg(not(feature = "rp235x"))]
 use tokio::time;
 
-/// Core 0 entry point.
 pub struct Core0;
 
-/// Static async executor for Core 0 on RP235x.
 #[cfg(feature = "rp235x")]
 pub static EXECUTOR: StaticCell<Executor> = StaticCell::new();
 
 #[cfg(feature = "rp235x")]
 impl Core0 {
-    /// Initializes the Core 0 executor and spawns the main state machine task.
+
     pub fn entry(
         net: NetPeripherals,
         trng: TrngPeripherals,
@@ -92,7 +87,7 @@ async fn task(
 
 #[cfg(all(feature = "linux", not(feature = "rp235x")))]
 impl Core0 {
-    /// Linux entry point for Core 0 (state machine & UDP networking thread).
+
     pub fn entry() {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -161,7 +156,6 @@ pub async fn run_udp_worker() -> Result<(), Box<dyn std::error::Error + Send + S
                     }
                 };
 
-                // Check for OTA configuration packet
                 if let Ok(config_pkt) = DeviceConfigPacket::from_bytes(&receive_buffer[..len]) {
                     println!("⚙️ [Core 0 Thread] Received DeviceConfigPacket from {remote_addr}");
                     let ack_packet = ServerPacket::new(ServerEvent::DeviceConfigAck, 0, [0u8; net::layout::DATA_SIZE]);
@@ -200,7 +194,7 @@ pub async fn run_udp_worker() -> Result<(), Box<dyn std::error::Error + Send + S
 
                 match server_packet.event() {
                     ServerEvent::HeartbeatAck => {
-                        // Heartbeat ack acknowledged
+
                     }
                     ServerEvent::HandshakeAck => {
                         if packet_token != 0 {

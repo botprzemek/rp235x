@@ -1,5 +1,3 @@
-//! [`Commands`] enum and subcommand dispatcher.
-
 use crate::commands::{
     AttachArgs, AttachCommand, CreateArgs, CreateCommand, FlashArgs, FlashCommand, PeekArgs,
     PeekCommand, RebootArgs, RebootCommand, VerifyArgs, VerifyCommand, ViewArgs, ViewCommand,
@@ -9,7 +7,6 @@ use crate::commands::{
 use clap::Subcommand;
 use config::ConfigError;
 
-/// Supported CLI subcommands.
 #[derive(Subcommand)]
 pub enum Commands {
     Create(CreateArgs),
@@ -23,7 +20,7 @@ pub enum Commands {
 }
 
 impl Commands {
-    /// Dispatches the subcommand to its handler.
+
     pub fn run(self) -> Result<(), ConfigError> {
         use Commands::*;
 

@@ -1,5 +1,3 @@
-//! Clean Leptos-based macOS HMI application for basketball scoreboard, HUB75 matrix simulator, and WebSocket dashboard.
-
 pub mod adapters;
 pub mod app;
 pub mod core;

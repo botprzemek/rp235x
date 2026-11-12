@@ -1,5 +1,3 @@
-//! Network adapters for HTTP, WebSocket, and UDP worker communication.
-
 pub mod connection;
 mod handler;
 mod http;

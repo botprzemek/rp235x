@@ -1,27 +1,17 @@
-//! RGB color constants and color-space helper functions.
-
-/// 24-bit RGB color triple `[red, green, blue]`.
 pub type Color = [u8; 3];
 
-/// Pure red RGB color.
 pub const RED: Color = [255, 0, 0];
 
-/// Pure green RGB color.
 pub const GREEN: Color = [0, 255, 0];
 
-/// Pure blue RGB color.
 pub const BLUE: Color = [0, 0, 255];
 
-/// Pure white RGB color.
 pub const WHITE: Color = [255, 255, 255];
 
-/// Pure black (off) RGB color.
 pub const BLACK: Color = [0, 0, 0];
 
-/// Coral red RGB color.
 pub const CORAL_RED: Color = [240, 80, 70];
 
-/// Scales RGB channels proportionally to `brightness_percent` (`0..=100`).
 #[must_use]
 #[inline(always)]
 pub fn with_brightness(color: Color, brightness_percent: u8) -> Color {
@@ -33,7 +23,6 @@ pub fn with_brightness(color: Color, brightness_percent: u8) -> Color {
     ]
 }
 
-/// Converts a hue angle in degrees (`0..360`) into a saturated RGB [`Color`].
 #[must_use]
 #[inline(always)]
 pub fn hue_to_rgb(hue: u16) -> Color {

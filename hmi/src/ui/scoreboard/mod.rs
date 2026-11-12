@@ -1,5 +1,3 @@
-//! Clean Leptos Scoreboard banner components with native macOS aesthetics.
-
 pub mod center_display;
 pub mod clock_stack;
 pub mod team_panel;
@@ -25,7 +23,7 @@ pub fn Scoreboard(
     view! {
         <div class="h-full flex items-center justify-center p-3 select-none">
             <div class="relative bg-zinc-900/65 text-white rounded-2xl p-5 border border-white/10 flex items-center gap-7 backdrop-blur-xl shadow-xl">
-                // Home Team
+
                 <div class="flex flex-col items-center min-w-[70px]">
                     <span class="text-[11px] uppercase text-zinc-400 font-medium mb-1">{home_team}</span>
                     <span class="text-4xl font-semibold tabular-nums text-amber-400">{home_score}</span>
@@ -39,7 +37,6 @@ pub fn Scoreboard(
                     </div>
                 </div>
 
-                // Center Clock & Quarter
                 <div class="flex flex-col items-center border-x border-white/10 px-6 min-w-[140px]">
                     <span class="text-[11px] font-mono font-medium text-zinc-400 mb-0.5">{quarter}</span>
                     <span class="text-3xl font-mono font-semibold tabular-nums text-white mb-2">{time}</span>
@@ -49,7 +46,6 @@ pub fn Scoreboard(
                     </div>
                 </div>
 
-                // Away Team
                 <div class="flex flex-col items-center min-w-[70px]">
                     <span class="text-[11px] uppercase text-zinc-400 font-medium mb-1">{away_team}</span>
                     <span class="text-4xl font-semibold tabular-nums text-cyan-400">{away_score}</span>

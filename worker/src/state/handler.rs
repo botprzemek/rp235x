@@ -1,5 +1,3 @@
-//! Inherent state handlers on [`Machine`] and the UDP client task.
-
 #[cfg(feature = "rp235x")]
 use crate::state::{Input, Machine};
 
@@ -36,7 +34,6 @@ use embassy_sync::signal::Signal;
 #[cfg(feature = "rp235x")]
 use embassy_time::Timer;
 
-/// Identifiers for worker lifecycle state handlers.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "rp235x", derive(Format))]
@@ -49,36 +46,29 @@ pub enum StateHandler {
     ErrorRecovery = 0x05,
 }
 
-/// Marker handler for the [`crate::state::State::Boot`] lifecycle step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "rp235x", derive(Format))]
 pub struct BootHandler;
 
-/// Marker handler for the [`crate::state::State::CoreSync`] lifecycle step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "rp235x", derive(Format))]
 pub struct SyncHandler;
 
-/// Marker handler for the [`crate::state::State::Networking`] lifecycle step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "rp235x", derive(Format))]
 pub struct NetworkingHandler;
 
-/// Marker handler for the [`crate::state::State::Running`] lifecycle step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "rp235x", derive(Format))]
 pub struct RunningHandler;
 
-/// Marker handler for the [`crate::state::State::ErrorRecovery`] lifecycle step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "rp235x", derive(Format))]
 pub struct ErrorRecoveryHandler;
 
-/// Signal emitted by Core 1 once its HUB75 display task has been spawned (RP235x).
 #[cfg(feature = "rp235x")]
 pub static CORE1_READY_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
-/// Linux thread readiness synchronization between Core 1 and Core 0.
 #[cfg(not(feature = "rp235x"))]
 pub struct LinuxReadySignal {
     signaled: std::sync::atomic::AtomicBool,
@@ -116,7 +106,7 @@ pub static CORE1_READY_SIGNAL: LinuxReadySignal = LinuxReadySignal::new();
 
 #[cfg(feature = "rp235x")]
 impl Machine {
-    /// Verifies and prints the flash configuration during boot.
+
     pub async fn handle_boot(&mut self) {
         let Ok(config) = Config::read() else {
             self.transition(Input::BootFailed);
@@ -131,14 +121,12 @@ impl Machine {
         self.transition(Input::BootSuccess);
     }
 
-    /// Waits for Core 1 to signal readiness.
     pub async fn handle_sync(&mut self) {
         CORE1_READY_SIGNAL.wait().await;
 
         self.transition(Input::CoreSynced);
     }
 
-    /// Initializes the TRNG, CYW43 Wi-Fi chip, and manages STA connection or AP setup mode.
     pub async fn handle_networking(
         &mut self,
         spawner: Spawner,
@@ -162,7 +150,7 @@ impl Machine {
             defmt::info!("Attempting connection with existing config...");
             if Net::try_join_wifi(&mut cyw43_driver.control, config, 3).await {
                 initialized_net.stack.wait_link_up().await;
-                // Wait for DHCP lease with timeout
+
                 let mut dhcp_ok = false;
                 for _ in 0..10 {
                     if initialized_net.stack.is_config_up() {
@@ -206,7 +194,6 @@ impl Machine {
             defmt::warn!("Wi-Fi connection unavailable. Launching AP Setup Hotspot...");
             self.transition(Input::WifiFailed);
 
-            // Configure Static IP 192.168.4.1/24 for AP mode
             let ap_ip = Ipv4Address::new(192, 168, 4, 1);
             let subnet = Ipv4Cidr::new(ap_ip, 24);
             initialized_net
@@ -217,14 +204,11 @@ impl Machine {
                     dns_servers: heapless::Vec::new(),
                 }));
 
-            // Start CYW43 in AP mode (Open network 'Worker-Setup' on channel 1)
             cyw43_driver.control.start_ap_open("Worker-Setup", 1).await;
             defmt::info!("AP 'Worker-Setup' started! Listening on UDP port 9000...");
 
-            // Spawn DHCP server in background
             spawner.spawn(defmt::unwrap!(dhcp_task(initialized_net.stack)));
 
-            // Run unified UDP task on port 9000 for OTA Wi-Fi configuration
             spawner.spawn(defmt::unwrap!(unified_udp_task(
                 initialized_net.stack,
                 watchdog,
@@ -245,13 +229,12 @@ impl Machine {
 
 #[cfg(feature = "linux")]
 impl Machine {
-    /// Boot verification for Linux worker.
+
     pub async fn handle_boot(&mut self) {
         println!("🔧 [Core 0 Thread] [BOOT] Initializing Linux worker state...");
         self.transition(Input::BootSuccess);
     }
 
-    /// Waits for Core 1 (HUB75 renderer thread) readiness.
     pub async fn handle_sync(&mut self) {
         println!("⏳ [Core 0 Thread] [SYNC] Waiting for Core 1 ready signal...");
         CORE1_READY_SIGNAL.wait();
@@ -259,7 +242,6 @@ impl Machine {
         self.transition(Input::CoreSynced);
     }
 
-    /// Networking lifecycle on Linux: transitions state and runs UDP worker loop.
     pub async fn handle_networking(&mut self) {
         println!("🌐 [Core 0 Thread] [NETWORKING] Initializing network stack...");
         self.transition(Input::WifiConnected);

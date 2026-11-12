@@ -1,15 +1,13 @@
-//! [`Device`] and [`DeviceType`] definitions and wire serialization.
-
 use core::str;
 
-use crate::data::device::layout;
+use super::layout;
 use crate::define_event;
 use crate::{ClientPacket, ServerPacket};
 
 use config::{ConfigError, DeviceConfig};
 
 define_event! {
-    /// Kind of client device connected to the master server.
+
     #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
     pub enum DeviceType {
         Worker = 0x01,
@@ -17,7 +15,6 @@ define_event! {
     }
 }
 
-/// Network representation of a connected client device and its game assignment.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -30,7 +27,7 @@ pub struct Device {
 }
 
 impl Device {
-    /// Creates a new [`Device`] with the default game assignment for its [`DeviceType`].
+
     pub fn try_new(
         device_type: DeviceType,
         serial_number: &str,
@@ -44,7 +41,6 @@ impl Device {
         Self::try_new_with_game_id(device_type, default_game_id, serial_number, device_id)
     }
 
-    /// Creates a new [`Device`] assigned to `game_id`.
     pub fn try_new_with_game_id(
         device_type: DeviceType,
         game_id: u16,
@@ -68,7 +64,6 @@ impl Device {
         Ok(device)
     }
 
-    /// Creates a [`Device`] from a [`DeviceConfig`] implementation.
     pub fn from_config(
         device_type: DeviceType,
         config: &impl DeviceConfig,
@@ -76,24 +71,20 @@ impl Device {
         Self::try_new(device_type, config.serial_number()?, config.device_id()?)
     }
 
-    /// Returns the [`DeviceType`] of this device.
     #[must_use]
     pub fn device_type(&self) -> DeviceType {
         self.device_type
     }
 
-    /// Returns the ID of the game currently assigned to this device (`0` if unassigned).
     #[must_use]
     pub fn game_id(&self) -> u16 {
         self.game_id
     }
 
-    /// Sets the ID of the game assigned to this device.
     pub fn set_game_id(&mut self, game_id: u16) {
         self.game_id = game_id;
     }
 
-    /// Validates that the device's serial number and identifier are non-empty UTF-8 strings.
     pub fn validate(&self) -> Result<(), ConfigError> {
         let serial_number = self.serial_number()?;
         let device_id = self.device_id()?;
@@ -105,7 +96,6 @@ impl Device {
         Ok(())
     }
 
-    /// Serializes this [`Device`] into a packet payload buffer.
     #[must_use]
     pub fn to_bytes(&self) -> [u8; layout::DATA_SIZE] {
         let mut bytes = [0u8; layout::DATA_SIZE];
@@ -120,7 +110,6 @@ impl Device {
         bytes
     }
 
-    /// Deserializes and validates a [`Device`] from a packet payload buffer.
     pub fn from_bytes(buffer: &[u8]) -> Result<Self, &'static str> {
         if buffer.len() < layout::DEVICE_ID_END {
             return Err("device_length");

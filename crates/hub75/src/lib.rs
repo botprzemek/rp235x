@@ -1,5 +1,3 @@
-//! HUB75 RGB LED matrix display buffer, bitplane modulation, and RP235x GPIO driver.
-
 #![no_std]
 
 mod bitplane;

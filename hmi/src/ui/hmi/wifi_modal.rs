@@ -1,5 +1,3 @@
-//! Native macOS modal sheet for Wi-Fi device configuration in Leptos.
-
 use leptos::prelude::*;
 
 #[component]
@@ -52,7 +50,7 @@ pub fn WifiConfigModal(
                     on:click=stop_prop
                     class="bg-[#242832]/95 border border-white/[0.12] rounded-xl w-full max-w-[420px] shadow-2xl p-4 flex flex-col gap-3.5 text-white/90"
                 >
-                    // Modal Header
+
                     <div class="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
                         <div class="flex items-center gap-2">
                             <span class="w-2 h-2 rounded-full bg-blue-400" />
@@ -68,7 +66,6 @@ pub fn WifiConfigModal(
                         </button>
                     </div>
 
-                    // Fields
                     <div class="flex flex-col gap-2.5 text-[11px]">
                         <div>
                             <label class="block text-white/50 mb-1 font-medium">{"Adres docelowy (IP / Port 9000)"}</label>
@@ -142,7 +139,6 @@ pub fn WifiConfigModal(
                         </div>
                     </div>
 
-                    // Status Message
                     {move || {
                         status_message.get().map(|msg| {
                             let is_err = msg.starts_with("Błąd");
@@ -157,7 +153,6 @@ pub fn WifiConfigModal(
                         })
                     }}
 
-                    // Footer Buttons
                     <div class="flex items-center justify-end gap-2 border-t border-white/[0.08] pt-3">
                         <button
                             on:click=move |e| on_close.run(e)

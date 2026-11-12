@@ -1,6 +1,4 @@
-//! Handshake payload model and wire layout.
+mod layout;
+mod model;
 
-pub(crate) mod layout;
-pub mod model;
-
-pub use model::Handshake;
+pub use model::{Handshake, HandshakeAck};

@@ -1,5 +1,3 @@
-//! REST API route handlers for querying and mutating games and devices.
-
 use std::sync::Arc;
 
 use crate::services::Services;
@@ -11,21 +9,18 @@ use axum::response::IntoResponse;
 use axum::routing::{self, Router};
 use basketball::{Score, Team};
 
-/// Path parameters for querying a single team's score.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetScoreRequest {
     team: Team,
 }
 
-/// JSON response containing a single team's score.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetScoreResponse {
     score: u16,
 }
 
-/// JSON request body for adding points to a team.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AddScoreRequest {
@@ -33,7 +28,6 @@ pub struct AddScoreRequest {
     score: Score,
 }
 
-/// JSON response containing both home and away team scores.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetScoresResponse {
@@ -41,11 +35,10 @@ pub struct GetScoresResponse {
     away_score: u16,
 }
 
-/// Router factory and handlers for `/api` endpoints.
 pub struct GameHandler;
 
 impl GameHandler {
-    /// Creates the `/api` [`Router`] backed by `services`.
+
     pub fn create(services: Arc<Services>) -> Router {
         Router::new()
             .route("/devices", routing::get(Self::get_devices))

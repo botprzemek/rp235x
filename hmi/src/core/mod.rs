@@ -1,8 +1,5 @@
-//! Core domain types and traits for HMI application state.
-
 use net::{ClientEvent, ClientPacket, Device, ServerPacket};
 
-/// Application domain events.
 #[derive(Debug, Clone)]
 pub enum AppAction {
     ConnectWs(String),
@@ -23,7 +20,6 @@ pub enum AppAction {
     },
 }
 
-/// Incoming notification from network or external hardware.
 #[derive(Debug, Clone)]
 pub enum NetworkNotification {
     Connected,

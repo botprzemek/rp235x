@@ -1,10 +1,3 @@
-//! Simulated dual-core architecture for Linux / desktop worker.
-//!
-//! Emulates:
-//! - Core 0: UDP networking, Discovery, Handshake, Heartbeat, and OTA Wi-Fi configuration reception.
-//! - Core 1: Scoreboard layout rendering and local clock interpolation at 60 Hz.
-//! - Shared Game State between Core 0 and Core 1.
-
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
@@ -20,7 +13,6 @@ use tokio::time;
 
 use crate::core1::ScoreboardLayout;
 
-/// Shared Game State between simulated Core 0 (networking) and Core 1 (display runner).
 #[derive(Clone)]
 pub struct SimulatedGameState {
     game: Arc<RwLock<Game>>,
@@ -33,24 +25,21 @@ impl Default for SimulatedGameState {
 }
 
 impl SimulatedGameState {
-    /// Creates a new empty [`SimulatedGameState`].
+
     pub fn new() -> Self {
         Self {
             game: Arc::new(RwLock::new(Game::empty())),
         }
     }
 
-    /// Reads snapshot of the game.
     pub fn get(&self) -> Game {
         *self.game.read().expect("game state read lock")
     }
 
-    /// Stores updated game.
     pub fn set(&self, game: Game) {
         *self.game.write().expect("game state write lock") = game;
     }
 
-    /// Updates clock tick.
     pub fn tick(&self, delta: Duration) {
         let mut guard = self.game.write().expect("game state write lock");
         if guard.state() == basketball::State::Running {
@@ -59,7 +48,6 @@ impl SimulatedGameState {
     }
 }
 
-/// Linux worker simulator replicating the dual-core RP235x firmware architecture.
 pub struct LinuxWorkerSimulator {
     device: Device,
     shared_state: SimulatedGameState,
@@ -67,7 +55,7 @@ pub struct LinuxWorkerSimulator {
 }
 
 impl LinuxWorkerSimulator {
-    /// Creates a new [`LinuxWorkerSimulator`] with identity `device`.
+
     pub fn new(device: Device) -> Self {
         Self {
             device,
@@ -76,7 +64,6 @@ impl LinuxWorkerSimulator {
         }
     }
 
-    /// Runs the virtualized dual-core worker.
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
         let shared_for_core0 = self.shared_state.clone();
         let shared_for_core1 = self.shared_state.clone();
@@ -84,12 +71,11 @@ impl LinuxWorkerSimulator {
         let running_core1 = self.running.clone();
         let device = self.device;
 
-        // Core 1: Display refresh & local clock interpolation loop (running concurrently)
         let core1_handle = tokio::spawn(async move {
             let mut display = DisplayBuffer::<64, 32, 16>::default();
             display.set_brightness(20);
             let mut layout = ScoreboardLayout::new();
-            let mut render_interval = time::interval(Duration::from_millis(16)); // ~60 Hz like HUB75
+            let mut render_interval = time::interval(Duration::from_millis(16));
             let mut last_tick = tokio::time::Instant::now();
             let mut last_rendered_second: u32 = 999999;
             let mut last_scores = (0u16, 0u16);
@@ -102,16 +88,13 @@ impl LinuxWorkerSimulator {
                 let delta = now.duration_since(last_tick);
                 last_tick = now;
 
-                // High-resolution clock interpolation on Core 1
                 shared_for_core1.tick(delta);
 
                 let game = shared_for_core1.get();
 
-                // Render through the firmware HUB75 layout methods
                 let color: Color = RED;
                 layout.render(&mut display, &game, color, true);
 
-                // Print terminal update whenever seconds, scores, or match state change
                 let current_second = game.regulation_millis() / 1000;
                 let scores = (
                     game.score(basketball::Team::Home),
@@ -131,7 +114,6 @@ impl LinuxWorkerSimulator {
             }
         });
 
-        // Core 0: UDP networking, master discovery, OTA config packet handling
         let core0_handle = tokio::spawn(async move {
             if let Err(e) = run_core0_networking(device, shared_for_core0, running_core0).await {
                 eprintln!("❌ Core 0 Networking error: {e}");
@@ -197,7 +179,6 @@ async fn run_core0_networking(
                     }
                 };
 
-                // Check for OTA configuration packet (same as RP235x firmware)
                 if let Ok(config_pkt) = DeviceConfigPacket::from_bytes(&receive_buffer[..len]) {
                     println!("⚙️ [Core 0] Received DeviceConfigPacket from {remote_addr}");
                     let ack_packet = ServerPacket::new(ServerEvent::DeviceConfigAck, 0, [0u8; net::layout::DATA_SIZE]);
@@ -235,7 +216,7 @@ async fn run_core0_networking(
 
                 match server_packet.event() {
                     ServerEvent::HeartbeatAck => {
-                        // Heartbeat ack acknowledged
+
                     }
                     ServerEvent::HandshakeAck => {
                         if packet_token != 0 {

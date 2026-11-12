@@ -1,5 +1,3 @@
-//! WebSocket upgrade handler and packet sender/receiver adapters.
-
 use std::sync::Arc;
 
 use crate::adapters::net::connection;
@@ -15,7 +13,6 @@ use futures::stream::{SplitSink, SplitStream, StreamExt};
 use net::layout::PACKET_SIZE;
 use net::{PacketReceiver, PacketSender, RawPacket};
 
-/// Outbound half of a WebSocket connection.
 pub struct WebSocketSender {
     sink: SplitSink<WebSocket, Message>,
 }
@@ -27,7 +24,6 @@ impl PacketSender for WebSocketSender {
     }
 }
 
-/// Inbound half of a WebSocket connection.
 pub struct WebSocketReceiver {
     stream: SplitStream<WebSocket>,
 }
@@ -49,11 +45,10 @@ impl PacketReceiver for WebSocketReceiver {
     }
 }
 
-/// Router factory and handler for `/ws` WebSocket upgrades.
 pub struct WebsocketHandler;
 
 impl WebsocketHandler {
-    /// Creates the `/ws` [`Router`] backed by `services`.
+
     pub fn create(services: Arc<Services>) -> Router {
         Router::new()
             .route("/ws", routing::get(Self::handle))
@@ -68,7 +63,6 @@ impl WebsocketHandler {
         connection::run(receiver, sender, services).await;
     }
 
-    /// Upgrades an incoming HTTP request to a binary packet WebSocket session.
     pub async fn handle(
         websocket: WebSocketUpgrade,
         State(services): State<Arc<Services>>,

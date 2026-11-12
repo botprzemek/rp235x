@@ -1,5 +1,3 @@
-//! Embassy network stack and Wi-Fi association initialization.
-
 use core::hint;
 use core::mem;
 
@@ -9,13 +7,11 @@ use embassy_net::{Config as NetConfig, DhcpConfig, Runner, Stack, StackResources
 use embassy_time::Timer;
 use static_cell::StaticCell;
 
-/// Initialized Embassy network [`Stack`] and its background [`Runner`].
 pub struct InitializedNetStack {
     pub stack: Stack<'static>,
     pub runner: Runner<'static, NetDriver<'static>>,
 }
 
-/// Network stack and Wi-Fi connection helper.
 pub struct Net;
 
 static SOCKETS: StaticCell<StackResources<5>> = StaticCell::new();
@@ -25,7 +21,7 @@ const CLM_ADDR: usize = 0x1024_0000 ^ CLM_MASK;
 const CLM_LEN: usize = 984;
 
 impl Net {
-    /// Initializes the CLM blob on the CYW43 controller and creates the DHCPv4 network stack.
+
     pub async fn init_stack(
         control: &mut Control<'static>,
         net_driver: NetDriver<'static>,
@@ -48,8 +44,6 @@ impl Net {
         InitializedNetStack { stack, runner }
     }
 
-    /// Joins the configured Wi-Fi network, attempting up to `max_retries` times.
-    /// Returns `true` if connected successfully, `false` otherwise.
     pub async fn try_join_wifi(
         control: &mut Control<'static>,
         config: &impl NetworkConfig,
@@ -102,14 +96,11 @@ impl Net {
         );
 
         let pointer = hint::black_box(address as *const Aligned<A4, [u8; CLM_LEN]>);
-        // SAFETY: `address` is 4-byte aligned (checked above) and points to the CYW43 CLM blob
-        // flashed at `0x1024_0000` with length `CLM_LEN`.
-        // Justification: Zero-copy access to memory-mapped XIP flash on RP235x.
+
         unsafe { &*pointer }
     }
 }
 
-/// Background Embassy task driving the TCP/IP and UDP network stack.
 #[embassy_executor::task]
 pub async fn net_task(mut runner: Runner<'static, NetDriver<'static>>) -> ! {
     runner.run().await

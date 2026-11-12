@@ -1,6 +1,3 @@
-//! Basketball team side (home or away).
-
-/// Competing team side in a basketball [`crate::Game`].
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

@@ -1,5 +1,3 @@
-//! Unified UDP handler for Worker state synchronization and OTA Wi-Fi configuration.
-
 use crate::peripherals::flash::write_config_to_flash;
 use crate::state::{GAME_STATE, IS_CONNECTED_TO_MASTER};
 
@@ -23,14 +21,6 @@ use static_cell::StaticCell;
 static UDP_RX_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
 static UDP_TX_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
 
-/// Background Embassy task running on port 9000.
-///
-/// Handles:
-/// 1. `ClientEvent::DeviceConfigSet` - OTA Wi-Fi configuration updates over UDP.
-///    Sends `ServerEvent::DeviceConfigAck`, writes to flash, sends `ServerEvent::DeviceConfigSuccess`,
-///    and triggers a clean reset via Watchdog.
-/// 2. In STA mode, discovers the master server over broadcast on port 9000, maintains heartbeats,
-///    and receives game frames at 60 Hz.
 #[embassy_executor::task]
 pub async fn unified_udp_task(
     stack: Stack<'static>,
@@ -63,7 +53,7 @@ pub async fn unified_udp_task(
     let mut packet_buffer = [0u8; 512];
 
     if is_ap_mode {
-        // In AP mode, worker simply waits for DeviceConfigPacket or DeviceConfigSet packets on port 9000
+
         loop {
             let (size, remote_endpoint) = match socket.recv_from(&mut packet_buffer).await {
                 Ok(res) => res,
@@ -85,7 +75,7 @@ pub async fn unified_udp_task(
             }
         }
     } else {
-        // In STA mode, discover master server and sync game state, while also accepting DeviceConfigSet
+
         let loaded_config = Config::read().ok();
         let device_bytes = loaded_config
             .and_then(|c| Device::from_config(DeviceType::Worker, &c).ok())
@@ -119,12 +109,11 @@ pub async fn unified_udp_task(
                             continue;
                         }
                         Err(_) => {
-                            // Normal 500ms timeout while waiting for Master response - do not spam logs
+
                             continue;
                         }
                     };
 
-                // Check if this is an incoming DeviceConfigPacket while waiting for master
                 if let Ok(config_pkt) = DeviceConfigPacket::from_bytes(&packet_buffer[..size]) {
                     handle_device_config(
                         &mut socket,
@@ -182,7 +171,7 @@ pub async fn unified_udp_task(
                 match embassy_futures::select::select(receive_future, tick_future).await {
                     embassy_futures::select::Either::First(result) => match result {
                         Ok((size, remote_endpoint)) => {
-                            // Check for OTA Wi-Fi configuration packet from HMI
+
                             if let Ok(config_pkt) =
                                 DeviceConfigPacket::from_bytes(&packet_buffer[..size])
                             {
@@ -289,7 +278,6 @@ async fn handle_device_config(
         remote_endpoint
     );
 
-    // 1. Immediately send Ack
     let ack_packet = ServerPacket::new(
         ServerEvent::DeviceConfigAck,
         0,
@@ -334,7 +322,6 @@ async fn handle_device_config(
     if write_config_to_flash(flash_peri, &new_config).is_ok() {
         defmt::info!("[WORKER] Flash programmed successfully! Sending DeviceConfigSuccess...");
 
-        // 2. Send Success packet back to HMI
         let success_packet = ServerPacket::new(
             ServerEvent::DeviceConfigSuccess,
             0,

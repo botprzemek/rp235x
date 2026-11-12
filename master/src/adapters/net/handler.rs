@@ -1,5 +1,3 @@
-//! [`ServerHandler`] implementation for the master server.
-
 use core::net::SocketAddr;
 use std::sync::Arc;
 
@@ -12,7 +10,6 @@ use net::{
     ClientEvent, ClientPacket, Device, DeviceType, ServerEvent, ServerHandler, ServerPacket,
 };
 
-/// Stateful per-connection packet handler for the master server.
 pub struct MasterServerHandler {
     services: Arc<Services>,
     sequence_id: u16,
@@ -21,7 +18,7 @@ pub struct MasterServerHandler {
 }
 
 impl MasterServerHandler {
-    /// Creates a new [`MasterServerHandler`] backed by `services`.
+
     #[must_use]
     pub fn new(services: Arc<Services>) -> Self {
         Self {
@@ -32,13 +29,11 @@ impl MasterServerHandler {
         }
     }
 
-    /// Returns `true` if this connection has completed a valid device handshake.
     #[must_use]
     pub fn is_validated(&self) -> bool {
         self.validated_device.is_some()
     }
 
-    /// Returns `true` if the validated device is a [`DeviceType::WebBrowser`].
     #[must_use]
     pub fn is_web_browser(&self) -> bool {
         matches!(
@@ -47,20 +42,17 @@ impl MasterServerHandler {
         )
     }
 
-    /// Returns the validated [`Device`] for this connection, if any.
     #[must_use]
     pub fn validated_device(&self) -> Option<Device> {
         self.validated_device
     }
 
-    /// Returns the currently selected game ID for this connection.
     #[must_use]
     #[allow(dead_code)]
     pub fn selected_game_id(&self) -> u16 {
         self.selected_game_id
     }
 
-    /// Snapshot of the connection state consumed by the outbound task.
     #[must_use]
     pub fn session(&self) -> Session {
         Session {
@@ -70,14 +62,12 @@ impl MasterServerHandler {
         }
     }
 
-    /// Whether this connection belongs to the device with the given serial number.
     #[must_use]
     pub fn is_device(&self, serial_number: &str) -> bool {
         self.validated_device
             .is_some_and(|device| device.serial_number() == Ok(serial_number))
     }
 
-    /// Updates the selected game ID and synchronizes it onto the validated device record.
     pub fn set_selected_game_id(&mut self, game_id: u16) {
         self.selected_game_id = game_id;
         if let Some(mut device) = self.validated_device {
@@ -86,7 +76,6 @@ impl MasterServerHandler {
         }
     }
 
-    /// Synchronizes the connection's selected game ID with the device registry.
     pub fn sync_assignment(&mut self) {
         if let Some(device) = self.validated_device
             && let Ok(serial_number) = device.serial_number()
@@ -98,7 +87,6 @@ impl MasterServerHandler {
         }
     }
 
-    /// Returns the [`Game`] currently selected by this connection, if any.
     pub fn selected_game(&mut self) -> Option<Game> {
         if self.selected_game_id == 0 {
             self.sync_assignment();

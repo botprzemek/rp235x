@@ -1,5 +1,3 @@
-//! Worker lifecycle state machine and shared game state primitives.
-
 use basketball::Game;
 
 #[cfg(feature = "rp235x")]
@@ -15,13 +13,11 @@ use embassy_sync::signal::Signal;
 
 use core::sync::atomic::AtomicBool;
 
-/// Global flag indicating whether Worker has established connection with Master over UDP.
 pub static IS_CONNECTED_TO_MASTER: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(feature = "rp235x"))]
 use std::sync::RwLock;
 
-/// Lock-free, non-blocking synchronized Game state container between Core 0 and Core 1.
 #[cfg(feature = "rp235x")]
 pub struct SharedGameState {
     state: CsMutex<RefCell<Game>>,
@@ -29,20 +25,18 @@ pub struct SharedGameState {
 
 #[cfg(feature = "rp235x")]
 impl SharedGameState {
-    /// Creates a new [`SharedGameState`] containing an empty initial game.
+
     pub const fn new() -> Self {
         Self {
             state: CsMutex::new(RefCell::new(Game::empty())),
         }
     }
 
-    /// Instant, non-blocking snapshot read for Core 1 (zero awaits, zero display jitter).
     #[inline]
     pub fn get(&self) -> Game {
         critical_section::with(|cs| *self.state.borrow(cs).borrow())
     }
 
-    /// Instant, non-blocking atomic update for Core 0.
     #[inline]
     pub fn set(&self, game: Game) {
         critical_section::with(|cs| {
@@ -50,7 +44,6 @@ impl SharedGameState {
         });
     }
 
-    /// Mutates the game state safely under a fast critical section.
     #[inline]
     #[allow(dead_code)]
     pub fn update<F: FnOnce(&mut Game)>(&self, f: F) {
@@ -63,7 +56,6 @@ impl SharedGameState {
 #[cfg(feature = "rp235x")]
 unsafe impl Sync for SharedGameState {}
 
-/// Thread-safe synchronized Game state container between Core 0 and Core 1 threads on Linux.
 #[cfg(not(feature = "rp235x"))]
 pub struct SharedGameState {
     state: RwLock<Game>,
@@ -71,26 +63,23 @@ pub struct SharedGameState {
 
 #[cfg(not(feature = "rp235x"))]
 impl SharedGameState {
-    /// Creates a new [`SharedGameState`] containing an empty initial game.
+
     pub const fn new() -> Self {
         Self {
             state: RwLock::new(Game::empty()),
         }
     }
 
-    /// Reads snapshot of the game.
     #[inline]
     pub fn get(&self) -> Game {
         *self.state.read().expect("game state read lock")
     }
 
-    /// Stores updated game.
     #[inline]
     pub fn set(&self, game: Game) {
         *self.state.write().expect("game state write lock") = game;
     }
 
-    /// Mutates the game state safely under a write lock.
     #[inline]
     #[allow(dead_code)]
     pub fn update<F: FnOnce(&mut Game)>(&self, f: F) {
@@ -98,7 +87,6 @@ impl SharedGameState {
     }
 }
 
-/// State transition events for [`Machine`].
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "rp235x", derive(Format))]
@@ -115,7 +103,6 @@ pub enum Input {
     RecoverySuccess = 0x80,
 }
 
-/// Lifecycle states of the RP235x worker.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "rp235x", derive(Format))]
@@ -128,18 +115,15 @@ pub enum State {
     ErrorRecovery = 0x05,
 }
 
-/// Finite state machine tracking the worker's boot and network lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "rp235x", derive(Format))]
 pub struct Machine {
     state: State,
 }
 
-/// Signal broadcasting worker [`State`] transitions on RP235x.
 #[cfg(feature = "rp235x")]
 pub static STATE_SIGNAL: Signal<CriticalSectionRawMutex, State> = Signal::new();
 
-/// Linux condition variable signal for [`State`] transitions.
 #[cfg(not(feature = "rp235x"))]
 pub struct LinuxSignal<T> {
     state: std::sync::Mutex<Option<T>>,
@@ -174,23 +158,20 @@ impl<T: Copy> LinuxSignal<T> {
 #[cfg(not(feature = "rp235x"))]
 pub static STATE_SIGNAL: LinuxSignal<State> = LinuxSignal::new();
 
-/// Shared [`Game`] state updated by Core 0 UDP networking and rendered by Core 1.
 pub static GAME_STATE: SharedGameState = SharedGameState::new();
 
 impl Machine {
-    /// Creates a new [`Machine`] in [`State::Boot`].
+
     #[must_use]
     pub const fn new() -> Self {
         Self { state: State::Boot }
     }
 
-    /// Returns the current [`State`] of the machine.
     #[must_use]
     pub fn current_state(&self) -> State {
         self.state
     }
 
-    /// Applies `input` to the state machine and signals [`STATE_SIGNAL`] if the state changed.
     pub fn transition(&mut self, input: Input) {
         let old_state = self.current_state();
         self.process(input);

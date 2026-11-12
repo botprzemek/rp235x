@@ -1,5 +1,3 @@
-//! UI components for Leptos HMI MacOS interface.
-
 pub mod hmi;
 pub mod matrix;
 pub mod scoreboard;

@@ -1,6 +1,3 @@
-//! Output pin trait and HUB75 signal bundle definition.
-
-/// Logic level of a digital output pin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PinLevel {
     Low,
@@ -13,15 +10,12 @@ impl From<bool> for PinLevel {
     }
 }
 
-/// Digital output pin abstraction for driving HUB75 signals.
 pub trait OutputPin {
-    /// Drives the pin to a logic high state.
+
     fn set_high(&mut self);
 
-    /// Drives the pin to a logic low state.
     fn set_low(&mut self);
 
-    /// Drives the pin to the given [`PinLevel`].
     #[inline(always)]
     fn set_level(&mut self, level: PinLevel) {
         match level {
@@ -31,7 +25,6 @@ pub trait OutputPin {
     }
 }
 
-/// Collection of digital output pins required to drive a HUB75 LED panel.
 #[non_exhaustive]
 pub struct LedOutputs<P> {
     pub r1: P,

@@ -1,5 +1,3 @@
-//! UDP server driver for communicating with RP235x hardware workers.
-
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -17,8 +15,8 @@ use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch};
 use tokio::time::{self, MissedTickBehavior};
 
-const SYNC_HEARTBEAT_DURATION: Duration = Duration::from_millis(100); // 10 Hz periodic sync (event-driven broadcast handles immediate updates)
-const WORKER_TIMEOUT_DURATION: Duration = Duration::from_secs(9); // 9 seconds without heartbeat -> offline
+const SYNC_HEARTBEAT_DURATION: Duration = Duration::from_millis(100);
+const WORKER_TIMEOUT_DURATION: Duration = Duration::from_secs(9);
 const OUTBOUND_QUEUE_CAPACITY: usize = 4096;
 
 #[derive(Clone)]
@@ -34,13 +32,12 @@ struct OutboundAck {
     target: SocketAddr,
 }
 
-/// UDP transport driver streaming periodic and event-driven game updates to RP235x workers.
 pub struct WorkerDriver {
     listener: Arc<UdpSocket>,
 }
 
 impl WorkerDriver {
-    /// Creates a new [`WorkerDriver`] wrapping `listener`.
+
     #[must_use]
     pub fn new(listener: UdpSocket) -> Self {
         Self {
@@ -48,7 +45,6 @@ impl WorkerDriver {
         }
     }
 
-    /// Spawns the UDP worker driver tasks onto the Tokio runtime.
     pub fn spawn(self, services: Arc<Services>) {
         tokio::spawn(async move {
             Self::run(self, services).await;
@@ -59,13 +55,11 @@ impl WorkerDriver {
         let (worker_tx, worker_rx) = watch::channel(HashMap::<String, ActiveWorker>::new());
         let (outbound_tx, outbound_rx) = mpsc::channel::<OutboundAck>(OUTBOUND_QUEUE_CAPACITY);
 
-        // Independent transmit task: drains responses without blocking the receive loop
         let transmit_socket = Arc::clone(&self.listener);
         tokio::spawn(async move {
             Self::handle_outbound_queue(transmit_socket, outbound_rx).await;
         });
 
-        // Dedicated receive task: non-blocking packet ingestion into processing pipeline
         let receive_socket = Arc::clone(&self.listener);
         let receive_services = Arc::clone(&services);
         let worker_tx_incoming = worker_tx.clone();
@@ -79,7 +73,6 @@ impl WorkerDriver {
             .await;
         });
 
-        // Periodic worker timeout check task: detects dead workers after 9s without heartbeat
         let timeout_services = Arc::clone(&services);
         let worker_tx_timeout = worker_tx.clone();
         tokio::spawn(async move {
@@ -109,7 +102,6 @@ impl WorkerDriver {
             }
         });
 
-        // Periodic tick broadcast task
         let tick_socket = Arc::clone(&self.listener);
         let tick_services = Arc::clone(&services);
         tokio::spawn(async move {
@@ -142,7 +134,6 @@ impl WorkerDriver {
             tokio::select! {
                 biased;
 
-                // Priority 1: Ingest and process UDP packet immediately
                 receive_result = socket.recv_from(&mut receive_buffer) => {
                     let (size, remote_address) = match receive_result {
                         Ok(result) => result,
@@ -228,7 +219,7 @@ impl WorkerDriver {
                             }
 
                             let now = Instant::now();
-                            // Check if this worker is already known with the same address
+
                             let (session_token, is_new_or_moved) = {
                                 let workers_guard = worker_tx.borrow();
                                 match workers_guard.get(serial_ref) {
@@ -268,7 +259,6 @@ impl WorkerDriver {
 
                             sequence_id = sequence_id.wrapping_add(1);
 
-                            // Send HandshakeAck with dedicated HandshakeAck payload
                             let handshake_ack = HandshakeAck::new(assigned_game_id, 0);
 
                             let ack_packet = ServerPacket::with_session(
@@ -284,7 +274,6 @@ impl WorkerDriver {
                                 target: remote_address,
                             });
 
-                            // Immediately follow up with the full GameUpdate if a game is assigned
                             if assigned_game_id != 0
                                 && let Some(game) = services.game().by_id(assigned_game_id)
                             {
@@ -306,7 +295,6 @@ impl WorkerDriver {
                     }
                 }
 
-                // Priority 2: Disconnection events
                 Ok(target_serial_number) = disconnect_rx.recv() => {
                     let mut removed = false;
                     worker_tx.send_modify(|workers| {

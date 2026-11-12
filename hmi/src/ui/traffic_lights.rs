@@ -1,11 +1,8 @@
-//! macOS Traffic Light window control button components (`CloseButton`, `MinimizeButton`, `MaximizeButton`, `TrafficLights`, and `NavigationBar`).
-
 use crate::adapters::tauri::invoke_tauri_window_command;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
-/// Visual state of a macOS traffic light button.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrafficLightState {
     NoFocus,
@@ -26,7 +23,6 @@ fn resolve_state(focused: bool, hovered: bool, pressed: bool) -> TrafficLightSta
     }
 }
 
-/// Hook that distinguishes a quick click from a click-and-hold (long-press).
 #[allow(clippy::type_complexity)]
 fn use_click_and_hold(
     onclick: Callback<web_sys::MouseEvent>,
@@ -252,8 +248,6 @@ pub fn MaximizeButton(
     }
 }
 
-/// Standalone traffic lights button group (Close, Minimize, Maximize) with hover sync
-/// and click-and-hold (long press) support.
 #[component]
 pub fn TrafficLights(
     #[prop(into, default = Signal::derive(|| true))] focused: Signal<bool>,
@@ -302,7 +296,6 @@ pub fn TrafficLights(
     }
 }
 
-/// Standalone draggable navigation bar containing traffic light window controls.
 #[component]
 pub fn NavigationBar(
     #[prop(into, default = Signal::derive(|| true))] focused: Signal<bool>,
@@ -330,7 +323,7 @@ pub fn NavigationBar(
         <header
             class="h-9 w-full flex items-center justify-between px-3.5 select-none border-b border-black/10 dark:border-white/[0.08] bg-[#f6f6f6] dark:bg-[#1e1e24] text-neutral-800 dark:text-neutral-200 transition-colors shrink-0 relative"
         >
-            // Traffic lights button group - strictly isolated from dragging
+
             <div class="flex items-center relative z-30 cursor-default">
                 <TrafficLights
                     focused=focused
@@ -344,7 +337,6 @@ pub fn NavigationBar(
                 />
             </div>
 
-            // Draggable center region - ONLY this region handles dragging!
             <div
                 data-tauri-drag-region
                 on:mousedown=on_start_drag

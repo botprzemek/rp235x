@@ -1,6 +1,3 @@
-//! Basketball game period (quarter) representation.
-
-/// Current period of a basketball [`crate::Game`].
 #[non_exhaustive]
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

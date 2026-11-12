@@ -1,6 +1,3 @@
-//! Native macOS modal sheet for configuring Master server address in Leptos,
-//! with automatic UDP network discovery, loading state, and manual fallback on timeout.
-
 use crate::adapters::tauri::invoke_discover_master;
 
 use leptos::prelude::*;
@@ -24,7 +21,6 @@ pub fn MasterServerModal(
     let discovery_state = RwSignal::new(DiscoveryState::Searching);
     let status_msg = RwSignal::new(None::<String>);
 
-    // Function to trigger discovery
     let start_discovery = move || {
         discovery_state.set(DiscoveryState::Searching);
         status_msg.set(Some(
@@ -49,7 +45,6 @@ pub fn MasterServerModal(
         });
     };
 
-    // When modal opens, initialize address and automatically run discovery
     Effect::new(move |_| {
         if is_open.get() {
             address_input.set(current_address.get());
@@ -84,7 +79,7 @@ pub fn MasterServerModal(
                     on:click=stop_prop
                     class="bg-[#242832]/95 border border-white/[0.12] rounded-xl w-full max-w-[420px] shadow-2xl p-4 flex flex-col gap-3.5 text-white/90"
                 >
-                    // Modal Header
+
                     <div class="flex items-center justify-between border-b border-white/[0.08] pb-2.5">
                         <div class="flex items-center gap-2">
                             <span class=move || format!(
@@ -107,7 +102,6 @@ pub fn MasterServerModal(
                         </button>
                     </div>
 
-                    // Discovery Banner / Loading / Result
                     {move || {
                         match discovery_state.get() {
                             DiscoveryState::Searching => view! {
@@ -155,7 +149,6 @@ pub fn MasterServerModal(
                         }
                     }}
 
-                    // Manual Input Field (Always available or unlocked after searching/timeout)
                     <div class="flex flex-col gap-2.5 text-[11px]">
                         <div>
                             <div class="flex items-center justify-between mb-1">
@@ -186,7 +179,6 @@ pub fn MasterServerModal(
                         </div>
                     </div>
 
-                    // Actions
                     <div class="flex items-center justify-between pt-2 border-t border-white/[0.08]">
                         <button
                             on:click=move |_| address_input.set("127.0.0.1:3000".to_string())

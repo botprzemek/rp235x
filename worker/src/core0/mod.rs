@@ -1,5 +1,3 @@
-//! Core 0 networking, CYW43 driver initialization, and executor entry point.
-
 #[cfg(feature = "rp235x")]
 pub mod cyw43;
 #[cfg(feature = "rp235x")]

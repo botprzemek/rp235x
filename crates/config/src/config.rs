@@ -1,5 +1,3 @@
-//! Core configuration types, builders, and memory integrity checks.
-
 use core::fmt;
 use core::marker::PhantomData;
 use core::mem;
@@ -7,13 +5,10 @@ use core::slice;
 use core::str;
 use core::sync::atomic::{self, Ordering};
 
-/// Size of the [`Config`] structure in bytes.
 pub const CONFIG_SIZE: usize = mem::size_of::<Config>();
 
-/// Flash memory address where the device configuration is stored on RP235x.
 pub const CONFIG_ADDR: usize = 0x1003_f000;
 
-/// Errors that can occur when reading, writing, or validating a [`Config`].
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigError {
@@ -26,7 +21,6 @@ pub enum ConfigError {
     StringTooLong,
 }
 
-/// Raw JSON-serializable input used to construct a [`Config`].
 #[cfg(feature = "std")]
 #[non_exhaustive]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -38,7 +32,6 @@ pub struct Input {
     pub wifi_password: std::string::String,
 }
 
-/// Fixed-capacity null-terminated UTF-8 field inside [`Config`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ConfigField<const N: usize>([u8; N]);
 
@@ -57,15 +50,12 @@ struct WifiPassword(ConfigField<64>);
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Checksum(u32);
 
-/// Typestate marker for an unverified [`Config`] loaded from raw memory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Raw;
 
-/// Typestate marker for a [`Config`] whose checksum integrity has been verified.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Verified;
 
-/// Device and network configuration block stored in flash or binary files.
 #[repr(C, align(4))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config<State = Verified> {
@@ -77,7 +67,6 @@ pub struct Config<State = Verified> {
     _state: PhantomData<State>,
 }
 
-/// Builder for constructing a verified [`Config`].
 #[derive(Default)]
 pub struct ConfigBuilder<'input> {
     serial_number: Option<&'input str>,
@@ -86,21 +75,17 @@ pub struct ConfigBuilder<'input> {
     wifi_password: Option<&'input str>,
 }
 
-/// Accessors for device identity fields.
 pub trait DeviceConfig {
-    /// Returns the device's serial number.
+
     fn serial_number(&self) -> Result<&str, ConfigError>;
 
-    /// Returns the device's identifier.
     fn device_id(&self) -> Result<&str, ConfigError>;
 }
 
-/// Accessors for wireless network credentials.
 pub trait NetworkConfig {
-    /// Returns the configured Wi-Fi SSID.
+
     fn wifi_ssid(&self) -> Result<&str, ConfigError>;
 
-    /// Returns the configured Wi-Fi password.
     fn wifi_password(&self) -> Result<&str, ConfigError>;
 }
 
@@ -200,7 +185,7 @@ impl<const N: usize> Default for ConfigField<N> {
 }
 
 impl<const N: usize> ConfigField<N> {
-    /// Creates a zero-initialized [`ConfigField`].
+
     #[must_use]
     pub(crate) const fn new() -> Self {
         Self([0; N])
@@ -236,7 +221,7 @@ impl<const N: usize> ConfigField<N> {
 }
 
 impl<State> Config<State> {
-    /// Creates a new [`Config`] from the provided credentials and computes its checksum.
+
     pub(crate) fn try_new(
         serial_number: &str,
         device_id: &str,
@@ -281,12 +266,9 @@ impl<State> Config<State> {
         Ok(config)
     }
 
-    /// Returns the raw byte representation of this [`Config`].
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
-        // SAFETY: `Self` is `#[repr(C, align(4))]` with all fields initialized as fixed-size
-        // byte arrays and a `u32` checksum, so reading `CONFIG_SIZE` bytes from `self` is valid.
-        // Justification: Needed for zero-copy serialization to flash/file storage.
+
         unsafe { slice::from_raw_parts((self as *const Self).cast::<u8>(), CONFIG_SIZE) }
     }
 
@@ -304,22 +286,17 @@ impl<State> Config<State> {
     fn update_checksum(&mut self) {
         let slice_len = CONFIG_SIZE - mem::size_of::<u32>();
         let pointer = (self as *const Self).cast::<u8>();
-        // SAFETY: `pointer` points to a valid `Self` instance and `slice_len` covers the initialized
-        // fields preceding `checksum`.
-        // Justification: Computes checksum directly over the `#[repr(C)]` struct layout without copying.
+
         let data = unsafe { slice::from_raw_parts(pointer, slice_len) };
 
         self.checksum = Self::calculate_checksum(data);
     }
 
-    /// Verifies that the stored checksum matches the calculated checksum of the fields.
     #[must_use]
     pub(crate) fn verify_integrity(&self) -> bool {
         let slice_len = CONFIG_SIZE - mem::size_of::<u32>();
         let pointer = (self as *const Self).cast::<u8>();
-        // SAFETY: `pointer` points to a valid `Self` instance and `slice_len` covers the initialized
-        // fields preceding `checksum`.
-        // Justification: Computes checksum directly over the `#[repr(C)]` struct layout without copying.
+
         let data = unsafe { slice::from_raw_parts(pointer, slice_len) };
 
         let computed = Self::calculate_checksum(data);
@@ -346,7 +323,7 @@ impl<State> Config<State> {
 }
 
 impl Config<Raw> {
-    /// Reinterprets a properly aligned byte slice of at least [`CONFIG_SIZE`] bytes as a [`Config<Raw>`].
+
     pub(crate) fn from_bytes(bytes: &[u8]) -> Result<&Self, ConfigError> {
         if bytes.len() < CONFIG_SIZE {
             return Err(ConfigError::Serialization);
@@ -357,23 +334,16 @@ impl Config<Raw> {
             return Err(ConfigError::Serialization);
         }
 
-        // SAFETY: `bytes` has at least `CONFIG_SIZE` bytes and `pointer` satisfies `Self`'s alignment.
-        // All bit patterns of `[u8; N]` and `u32` are valid for `Config<Raw>`.
-        // Justification: Zero-copy reading from memory-mapped flash on embedded target.
         let config_ref = unsafe { &*pointer.cast::<Self>() };
 
         Ok(config_ref)
     }
 
-    /// Verifies checksum integrity and transitions the reference from [`Raw`] to [`Verified`].
     pub(crate) fn verify(&self) -> Result<&Config<Verified>, ConfigError> {
         if !self.verify_integrity() {
             return Err(ConfigError::IntegrityCheckFailed);
         }
 
-        // SAFETY: `Config<Raw>` and `Config<Verified>` have identical `#[repr(C, align(4))]` layout,
-        // differing only in the zero-sized `PhantomData` marker.
-        // Justification: Typestate transition on a borrowed flash reference without copying.
         let verified_ref = unsafe { &*(self as *const Self).cast::<Config<Verified>>() };
 
         Ok(verified_ref)
@@ -381,37 +351,32 @@ impl Config<Raw> {
 }
 
 impl<'input> ConfigBuilder<'input> {
-    /// Creates a new empty [`ConfigBuilder`].
+
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Sets the serial number.
     pub fn serial_number(&mut self, serial_number: &'input str) -> &mut Self {
         self.serial_number = Some(serial_number);
         self
     }
 
-    /// Sets the device identifier.
     pub fn device_id(&mut self, device_id: &'input str) -> &mut Self {
         self.device_id = Some(device_id);
         self
     }
 
-    /// Sets the Wi-Fi SSID.
     pub fn wifi_ssid(&mut self, wifi_ssid: &'input str) -> &mut Self {
         self.wifi_ssid = Some(wifi_ssid);
         self
     }
 
-    /// Sets the Wi-Fi password.
     pub fn wifi_password(&mut self, wifi_password: &'input str) -> &mut Self {
         self.wifi_password = Some(wifi_password);
         self
     }
 
-    /// Clears all configured fields in the builder.
     pub fn reset(&mut self) -> &mut Self {
         self.serial_number = None;
         self.device_id = None;
@@ -420,7 +385,6 @@ impl<'input> ConfigBuilder<'input> {
         self
     }
 
-    /// Builds a verified [`Config`] from the configured fields.
     pub fn build(&self) -> Result<Config<Verified>, ConfigError> {
         Config::<Verified>::try_new(
             self.serial_number.ok_or(ConfigError::Serialization)?,

@@ -1,5 +1,3 @@
-//! Application builder, server startup, and graceful shutdown orchestration.
-
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -12,13 +10,10 @@ use crate::services::Services;
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::signal;
 
-/// Typestate marker indicating that a listener address has not been configured.
 pub struct Absent;
 
-/// Typestate marker indicating that a listener address has been configured.
 pub struct Present;
 
-/// Configured master server application ready to start HTTP and UDP listeners.
 pub struct Application<HttpState, UdpState> {
     http_address: Option<String>,
     udp_address: Option<String>,
@@ -27,7 +22,6 @@ pub struct Application<HttpState, UdpState> {
     _udp: PhantomData<UdpState>,
 }
 
-/// Builder for configuring [`Application`] listener addresses.
 pub struct ApplicationBuilder<HttpState = Absent, UdpState = Absent> {
     http_address: Option<String>,
     udp_address: Option<String>,
@@ -71,7 +65,6 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         }
     }
 
-    /// Logs the HTTP listener configuration and marks the HTTP typestate as [`Present`].
     pub async fn with_http(self) -> Application<Present, UdpState> {
         match &self.http_address {
             Some(address) => println!("INFO: Listening on http://{address}"),
@@ -87,7 +80,6 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         }
     }
 
-    /// Logs the UDP listener configuration and marks the UDP typestate as [`Present`].
     pub async fn with_udp(self) -> Application<HttpState, Present> {
         match &self.udp_address {
             Some(address) => println!("INFO: Listening on udp://{address}"),
@@ -103,7 +95,6 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         }
     }
 
-    /// Initializes the database, services, and configured network listeners.
     pub async fn start(self) -> Arc<Services> {
         let database = match &self.database_path {
             Some(path) => {
@@ -145,7 +136,6 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
             )
             .expect("failed to create UDP socket2");
 
-            // Increase receive and send kernel buffers to 4MB to prevent drops under high load
             let _ = socket2_sock.set_recv_buffer_size(4 * 1024 * 1024);
             let _ = socket2_sock.set_send_buffer_size(4 * 1024 * 1024);
             let _ = socket2_sock.set_nonblocking(true);
@@ -164,7 +154,6 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         services
     }
 
-    /// Starts the application and waits until a termination signal is received.
     pub async fn run(self) {
         let _services = self.start().await;
         Self::wait_for_shutdown().await;
@@ -172,7 +161,7 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
 }
 
 impl ApplicationBuilder<Absent, Absent> {
-    /// Creates a new [`ApplicationBuilder`] with no listeners configured.
+
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -186,14 +175,13 @@ impl ApplicationBuilder<Absent, Absent> {
 }
 
 impl<HttpState, UdpState> ApplicationBuilder<HttpState, UdpState> {
-    /// Configures the ReDB database file path.
+
     #[must_use]
     pub fn database_path<P: AsRef<Path>>(mut self, path: P) -> Self {
         self.database_path = Some(path.as_ref().to_path_buf());
         self
     }
 
-    /// Configures the HTTP server bind `address`.
     #[must_use]
     pub fn http_address(self, address: &str) -> ApplicationBuilder<Present, UdpState> {
         ApplicationBuilder {
@@ -205,7 +193,6 @@ impl<HttpState, UdpState> ApplicationBuilder<HttpState, UdpState> {
         }
     }
 
-    /// Configures the UDP worker bind `address`.
     #[must_use]
     pub fn udp_address(self, address: &str) -> ApplicationBuilder<HttpState, Present> {
         ApplicationBuilder {
@@ -217,7 +204,6 @@ impl<HttpState, UdpState> ApplicationBuilder<HttpState, UdpState> {
         }
     }
 
-    /// Builds the [`Application`].
     #[must_use]
     pub fn build(self) -> Application<HttpState, UdpState> {
         Application {
