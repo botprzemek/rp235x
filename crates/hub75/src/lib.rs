@@ -2,9 +2,9 @@
 
 #![no_std]
 
-pub mod color;
-pub mod display;
 mod bitplane;
+mod color;
+mod display;
 mod font;
 mod led;
 mod output;
@@ -12,7 +12,7 @@ mod output;
 #[cfg(feature = "rp235x")]
 pub mod rp235x;
 
-pub use color::{BLACK, BLUE, Color, GREEN, RED, WHITE, hue_to_rgb, with_brightness};
+pub use color::{BLACK, BLUE, CORAL_RED, Color, GREEN, RED, WHITE, hue_to_rgb, with_brightness};
 pub use display::DisplayBuffer;
 pub use output::{LedOutputs, OutputPin, PinLevel};
 

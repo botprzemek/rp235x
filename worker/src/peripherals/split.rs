@@ -33,6 +33,8 @@ pub fn split(peripherals: Peripherals) -> BoardPeripherals {
     };
 
     let led = LedPeripherals::new(
+        peripherals.PIO1,
+        peripherals.DMA_CH1,
         peripherals.PIN_2,
         peripherals.PIN_3,
         peripherals.PIN_4,
@@ -58,4 +60,3 @@ pub fn split(peripherals: Peripherals) -> BoardPeripherals {
         core1: peripherals.CORE1,
     }
 }
-

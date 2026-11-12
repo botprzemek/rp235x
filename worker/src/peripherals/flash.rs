@@ -1,8 +1,8 @@
 //! In-Application Programming (IAP) flash writer for RP2350.
 
 use config::{CONFIG_ADDR, Config, Verified};
-use embassy_rp::flash::{Blocking, Flash};
 use embassy_rp::Peri;
+use embassy_rp::flash::{Blocking, Flash};
 use embassy_rp::peripherals::FLASH;
 
 /// Flash base address for RP2350 XIP.
@@ -22,6 +22,7 @@ const FLASH_CAPACITY: usize = 4 * 1024 * 1024;
 ///
 /// This function executes flash erase and program routines in RAM with interrupts disabled.
 /// All other cores must not execute from XIP flash while this operation is in progress.
+#[allow(clippy::result_unit_err)]
 pub fn write_config_to_flash<'d>(
     flash_peri: Peri<'d, FLASH>,
     config: &Config<Verified>,

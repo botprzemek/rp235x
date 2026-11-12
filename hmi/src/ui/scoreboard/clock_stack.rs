@@ -6,4 +6,3 @@ use leptos::prelude::*;
 pub fn ClockStack() -> impl IntoView {
     view! { <div/> }
 }
-

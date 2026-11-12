@@ -71,7 +71,7 @@ pub fn WifiConfigModal(
                     // Fields
                     <div class="flex flex-col gap-2.5 text-[11px]">
                         <div>
-                            <label class="block text-white/50 mb-1 font-medium">{"Adres docelowy (IP / Port 8001)"}</label>
+                            <label class="block text-white/50 mb-1 font-medium">{"Adres docelowy (IP / Port 9000)"}</label>
                             <input
                                 type="text"
                                 prop:value=move || target_ip.get()
@@ -111,7 +111,7 @@ pub fn WifiConfigModal(
                             <div class="flex justify-between items-center mb-1">
                                 <label class="text-white/50 font-medium">{"Nazwa sieci (SSID)"}</label>
                                 <span class="text-[10px] font-mono tabular-nums text-white/40">
-                                    {move || format!("{}/32 B", wifi_ssid.get().as_bytes().len())}
+                                    {move || format!("{}/32 B", wifi_ssid.get().len())}
                                 </span>
                             </div>
                             <input
@@ -128,7 +128,7 @@ pub fn WifiConfigModal(
                             <div class="flex justify-between items-center mb-1">
                                 <label class="text-white/50 font-medium">{"Hasło sieci Wi-Fi"}</label>
                                 <span class="text-[10px] font-mono tabular-nums text-white/40">
-                                    {move || format!("{}/64 B", wifi_password.get().as_bytes().len())}
+                                    {move || format!("{}/64 B", wifi_password.get().len())}
                                 </span>
                             </div>
                             <input

@@ -15,7 +15,7 @@ use net::{
 /// Stateful per-connection packet handler for the master server.
 pub struct MasterServerHandler {
     services: Arc<Services>,
-    sequence_id: u8,
+    sequence_id: u16,
     validated_device: Option<Device>,
     selected_game_id: u16,
 }

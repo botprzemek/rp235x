@@ -97,7 +97,6 @@ html.non-macos,
     html,
     body {
         @apply overflow-hidden outline-none font-sans antialiased m-0 p-0 select-none;
-        @apply bg-white;
         font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     }
     *:focus,

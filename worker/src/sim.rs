@@ -14,7 +14,7 @@ use basketball::{Game, Scorable};
 use hub75::{Color, DisplayBuffer, RED};
 use net::event::{ClientEvent, ServerEvent};
 use net::layout::PACKET_SIZE;
-use net::{ClientPacket, Device, DeviceConfigPacket, ServerPacket};
+use net::{ClientPacket, Device, DeviceConfigPacket, Heartbeat, ServerPacket};
 use tokio::net::UdpSocket;
 use tokio::time;
 
@@ -109,14 +109,20 @@ impl LinuxWorkerSimulator {
 
                 // Render through the firmware HUB75 layout methods
                 let color: Color = RED;
-                layout.render(&mut display, &game, color);
+                layout.render(&mut display, &game, color, true);
 
                 // Print terminal update whenever seconds, scores, or match state change
                 let current_second = game.regulation_millis() / 1000;
-                let scores = (game.score(basketball::Team::Home), game.score(basketball::Team::Away));
+                let scores = (
+                    game.score(basketball::Team::Home),
+                    game.score(basketball::Team::Away),
+                );
                 let state = game.state();
 
-                if current_second != last_rendered_second || scores != last_scores || state != last_state {
+                if current_second != last_rendered_second
+                    || scores != last_scores
+                    || state != last_state
+                {
                     last_rendered_second = current_second;
                     last_scores = scores;
                     last_state = state;
@@ -153,7 +159,7 @@ async fn run_core0_networking(
     let device_bytes = device.to_bytes();
     let broadcast_target: SocketAddr = "255.255.255.255:9000".parse()?;
 
-    let mut sequence_id: u8 = 0;
+    let mut sequence_id: u16 = 0;
     let mut receive_buffer = [0u8; 1024];
 
     println!("🔍 [Core 0] Searching for Master server on 255.255.255.255:9000...");
@@ -167,7 +173,18 @@ async fn run_core0_networking(
             _ = heartbeat_interval.tick() => {
                 sequence_id = sequence_id.wrapping_add(1);
                 let target = master_address.unwrap_or(broadcast_target);
-                let packet = ClientPacket::new(ClientEvent::HandshakeHeartbeat, sequence_id, device_bytes);
+                let packet = if master_address.is_some() && session_token != 0 {
+                    let heartbeat_bytes = Heartbeat::new(0).to_bytes();
+                    ClientPacket::with_session(
+                        ClientEvent::HandshakeHeartbeat,
+                        sequence_id,
+                        session_token,
+                        Heartbeat::PAYLOAD_LEN,
+                        heartbeat_bytes,
+                    )
+                } else {
+                    ClientPacket::new(ClientEvent::HandshakeRequest, sequence_id, device_bytes)
+                };
                 let _ = socket.send_to(&packet.to_bytes(), target).await;
             }
 
@@ -211,18 +228,23 @@ async fn run_core0_networking(
                     master_address = Some(remote_addr);
                 }
 
+                let packet_token = server_packet.session_token();
+                if session_token != 0 && packet_token != session_token {
+                    continue;
+                }
+
                 match server_packet.event() {
+                    ServerEvent::HeartbeatAck => {
+                        // Heartbeat ack acknowledged
+                    }
                     ServerEvent::HandshakeAck => {
-                        if let Ok(game) = Game::try_from(server_packet) {
-                            session_token = game.session_token();
-                            shared_state.set(game);
+                        if packet_token != 0 {
+                            session_token = packet_token;
                         }
                     }
                     ServerEvent::GameUpdate => {
                         if let Ok(game) = Game::try_from(server_packet) {
-                            if session_token == 0 || game.session_token() == 0 || game.session_token() == session_token {
-                                shared_state.set(game);
-                            }
+                            shared_state.set(game);
                         }
                     }
                     _ => {}

@@ -1,4 +1,5 @@
 //! Core 0 executor and state machine entry task.
+//!
 
 #[cfg(feature = "rp235x")]
 use crate::peripherals::{NetPeripherals, TrngPeripherals};
@@ -14,25 +15,36 @@ use embassy_rp::peripherals::{FLASH, WATCHDOG};
 #[cfg(feature = "rp235x")]
 use static_cell::StaticCell;
 
-#[cfg(not(feature = "rp235x"))]
+#[cfg(feature = "linux")]
 #[cfg(not(feature = "rp235x"))]
 use crate::state::{GAME_STATE, IS_CONNECTED_TO_MASTER, Machine};
-#[cfg(not(feature = "rp235x"))]
-use core::sync::atomic::Ordering;
+#[cfg(feature = "linux")]
 #[cfg(not(feature = "rp235x"))]
 use basketball::Game;
+#[cfg(feature = "linux")]
 #[cfg(not(feature = "rp235x"))]
-use net::event::{ClientEvent, ServerEvent};
+use core::sync::atomic::Ordering;
+#[cfg(feature = "linux")]
+#[cfg(not(feature = "rp235x"))]
+use net::event::ClientEvent;
+#[cfg(feature = "linux")]
 #[cfg(not(feature = "rp235x"))]
 use net::layout::PACKET_SIZE;
+#[cfg(feature = "linux")]
 #[cfg(not(feature = "rp235x"))]
-use net::{ClientPacket, Device, DeviceConfigPacket, DeviceType, ServerPacket};
+use net::{
+    ClientPacket, Device, DeviceConfigPacket, DeviceType, Heartbeat, ServerEvent, ServerPacket,
+};
+#[cfg(feature = "linux")]
 #[cfg(not(feature = "rp235x"))]
 use std::net::SocketAddr;
+#[cfg(feature = "linux")]
 #[cfg(not(feature = "rp235x"))]
 use std::time::Duration;
+#[cfg(feature = "linux")]
 #[cfg(not(feature = "rp235x"))]
 use tokio::net::UdpSocket;
+#[cfg(feature = "linux")]
 #[cfg(not(feature = "rp235x"))]
 use tokio::time;
 
@@ -78,7 +90,7 @@ async fn task(
         .await;
 }
 
-#[cfg(not(feature = "rp235x"))]
+#[cfg(all(feature = "linux", not(feature = "rp235x")))]
 impl Core0 {
     /// Linux entry point for Core 0 (state machine & UDP networking thread).
     pub fn entry() {
@@ -101,17 +113,17 @@ impl Core0 {
     }
 }
 
-#[cfg(not(feature = "rp235x"))]
+#[cfg(all(feature = "linux", not(feature = "rp235x")))]
 pub async fn run_udp_worker() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let socket = UdpSocket::bind("0.0.0.0:8001").await?;
+    let socket = UdpSocket::bind("0.0.0.0:9000").await?;
     socket.set_broadcast(true)?;
-    println!("📡 [Core 0 Thread] UDP Worker socket bound to 0.0.0.0:8001");
+    println!("📡 [Core 0 Thread] UDP Worker socket bound to 0.0.0.0:9000");
 
     let device = Device::try_new(DeviceType::Worker, "sn-linux-001", "worker-linux")?;
     let device_bytes = device.to_bytes();
     let broadcast_target: SocketAddr = "255.255.255.255:9000".parse()?;
 
-    let mut sequence_id: u8 = 0;
+    let mut sequence_id: u16 = 0;
     let mut receive_buffer = [0u8; 1024];
 
     println!("🔍 [Core 0 Thread] Searching for Master server on 255.255.255.255:9000...");
@@ -125,7 +137,18 @@ pub async fn run_udp_worker() -> Result<(), Box<dyn std::error::Error + Send + S
             _ = heartbeat_interval.tick() => {
                 sequence_id = sequence_id.wrapping_add(1);
                 let target = master_address.unwrap_or(broadcast_target);
-                let packet = ClientPacket::new(ClientEvent::HandshakeHeartbeat, sequence_id, device_bytes);
+                let packet = if master_address.is_some() && session_token != 0 {
+                    let heartbeat_bytes = Heartbeat::new(0).to_bytes();
+                    ClientPacket::with_session(
+                        ClientEvent::HandshakeHeartbeat,
+                        sequence_id,
+                        session_token,
+                        Heartbeat::PAYLOAD_LEN,
+                        heartbeat_bytes,
+                    )
+                } else {
+                    ClientPacket::new(ClientEvent::HandshakeRequest, sequence_id, device_bytes)
+                };
                 let _ = socket.send_to(&packet.to_bytes(), target).await;
             }
 
@@ -170,18 +193,23 @@ pub async fn run_udp_worker() -> Result<(), Box<dyn std::error::Error + Send + S
                     IS_CONNECTED_TO_MASTER.store(true, Ordering::Release);
                 }
 
+                let packet_token = server_packet.session_token();
+                if session_token != 0 && packet_token != session_token {
+                    continue;
+                }
+
                 match server_packet.event() {
+                    ServerEvent::HeartbeatAck => {
+                        // Heartbeat ack acknowledged
+                    }
                     ServerEvent::HandshakeAck => {
-                        if let Ok(game) = Game::try_from(server_packet) {
-                            session_token = game.session_token();
-                            GAME_STATE.set(game);
+                        if packet_token != 0 {
+                            session_token = packet_token;
                         }
                     }
                     ServerEvent::GameUpdate => {
                         if let Ok(game) = Game::try_from(server_packet) {
-                            if session_token == 0 || game.session_token() == 0 || game.session_token() == session_token {
-                                GAME_STATE.set(game);
-                            }
+                            GAME_STATE.set(game);
                         }
                     }
                     _ => {}

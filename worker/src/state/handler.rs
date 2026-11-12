@@ -1,5 +1,6 @@
 //! Inherent state handlers on [`Machine`] and the UDP client task.
 
+#[cfg(feature = "rp235x")]
 use crate::state::{Input, Machine};
 
 #[cfg(feature = "rp235x")]
@@ -84,6 +85,13 @@ pub struct LinuxReadySignal {
 }
 
 #[cfg(not(feature = "rp235x"))]
+impl Default for LinuxReadySignal {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(not(feature = "rp235x"))]
 impl LinuxReadySignal {
     pub const fn new() -> Self {
         Self {
@@ -92,7 +100,8 @@ impl LinuxReadySignal {
     }
 
     pub fn signal(&self) {
-        self.signaled.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.signaled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn wait(&self) {
@@ -210,12 +219,12 @@ impl Machine {
 
             // Start CYW43 in AP mode (Open network 'Worker-Setup' on channel 1)
             cyw43_driver.control.start_ap_open("Worker-Setup", 1).await;
-            defmt::info!("AP 'Worker-Setup' started! Listening on UDP port 8001...");
+            defmt::info!("AP 'Worker-Setup' started! Listening on UDP port 9000...");
 
             // Spawn DHCP server in background
             spawner.spawn(defmt::unwrap!(dhcp_task(initialized_net.stack)));
 
-            // Run unified UDP task on port 8001 for OTA Wi-Fi configuration
+            // Run unified UDP task on port 9000 for OTA Wi-Fi configuration
             spawner.spawn(defmt::unwrap!(unified_udp_task(
                 initialized_net.stack,
                 watchdog,
@@ -234,7 +243,7 @@ impl Machine {
     }
 }
 
-#[cfg(not(feature = "rp235x"))]
+#[cfg(feature = "linux")]
 impl Machine {
     /// Boot verification for Linux worker.
     pub async fn handle_boot(&mut self) {
@@ -254,7 +263,7 @@ impl Machine {
     pub async fn handle_networking(&mut self) {
         println!("🌐 [Core 0 Thread] [NETWORKING] Initializing network stack...");
         self.transition(Input::WifiConnected);
-        println!("🚀 [Core 0 Thread] [RUNNING] Starting UDP worker loop on port 8001...");
+        println!("🚀 [Core 0 Thread] [RUNNING] Starting UDP worker loop on port 9000...");
         if let Err(e) = crate::core0::entry::run_udp_worker().await {
             eprintln!("⚠️ [Core 0 Thread] Networking error: {e}");
             self.transition(Input::ErrorOccurred);

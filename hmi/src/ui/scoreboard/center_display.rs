@@ -6,4 +6,3 @@ use leptos::prelude::*;
 pub fn CenterDisplay() -> impl IntoView {
     view! { <div/> }
 }
-

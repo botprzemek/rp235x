@@ -4,8 +4,8 @@ pub mod base;
 pub mod client;
 pub mod server;
 
-pub use base::Packet;
 #[cfg(feature = "serde")]
 pub(crate) use base::serialize_data;
+pub use base::{Packet, crc16_ccitt};
 pub use client::ClientPacket;
 pub use server::ServerPacket;

@@ -133,7 +133,7 @@ fn send_device_config(
     let target_addr = if target_ip.contains(':') {
         target_ip
     } else {
-        format!("{}:8001", target_ip)
+        format!("{}:9000", target_ip)
     };
 
     socket

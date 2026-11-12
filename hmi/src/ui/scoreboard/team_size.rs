@@ -6,4 +6,3 @@ use leptos::prelude::*;
 pub fn TeamSize() -> impl IntoView {
     view! { <div/> }
 }
-

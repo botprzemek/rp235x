@@ -1,13 +1,13 @@
 //! Legacy HMI interface with 3-column macOS layout: Sidebar, MatchControlPanel, and DeviceInspector.
 
 use core::pin::pin;
-use core::sync::atomic::{AtomicU8, Ordering};
+use core::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 
 use crate::adapters::tauri::{invoke_send_device_config, invoke_tauri_window_command};
 use crate::adapters::ws::{
-    BrowserWebSocketAdapter, HmiClientHandler, load_master_address,
-    load_or_create_browser_device, save_master_address,
+    BrowserWebSocketAdapter, HmiClientHandler, load_master_address, load_or_create_browser_device,
+    save_master_address,
 };
 use crate::ui::hmi::{
     DeviceInspector, MasterServerModal, MatchControlPanel, NavigationSidebar, WifiConfigModal,
@@ -15,11 +15,11 @@ use crate::ui::hmi::{
 
 use basketball::{Discipline, Game};
 use config::DeviceConfig;
+use futures::StreamExt;
 use futures::channel::mpsc::{self, UnboundedSender};
 use futures::future::{self, Either};
-use futures::StreamExt;
 use leptos::prelude::*;
-use net::layout::PACKET_SIZE;
+use net::layout::{DATA_SIZE, PACKET_SIZE};
 use net::{
     Client, ClientEvent, ClientPacket, Device, DeviceType, NetError, ServerEvent, ServerPacket,
     Transport,
@@ -45,7 +45,7 @@ pub fn LegacyHmiView(
     // WebSocket state
     let is_connected = RwSignal::new(false);
     let command_sender = RwSignal::new(None::<UnboundedSender<ClientPacket>>);
-    let sequence_id = Arc::new(AtomicU8::new(0));
+    let sequence_id = Arc::new(AtomicU16::new(0));
     let logs = RwSignal::new(Vec::<String>::new());
 
     // Domain data
@@ -100,33 +100,37 @@ pub fn LegacyHmiView(
                 let on_zoom_out = on_zoom_out;
                 let on_zoom_reset = on_zoom_reset;
 
-                Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(move |e: web_sys::KeyboardEvent| {
-                    if e.meta_key() || e.ctrl_key() {
-                        match e.key().as_str() {
-                            "=" | "+" => {
-                                e.prevent_default();
-                                on_zoom_in.run(());
+                Closure::<dyn FnMut(web_sys::KeyboardEvent)>::new(
+                    move |e: web_sys::KeyboardEvent| {
+                        if e.meta_key() || e.ctrl_key() {
+                            match e.key().as_str() {
+                                "=" | "+" => {
+                                    e.prevent_default();
+                                    on_zoom_in.run(());
+                                }
+                                "-" => {
+                                    e.prevent_default();
+                                    on_zoom_out.run(());
+                                }
+                                "0" => {
+                                    e.prevent_default();
+                                    on_zoom_reset.run(());
+                                }
+                                _ => {}
                             }
-                            "-" => {
-                                e.prevent_default();
-                                on_zoom_out.run(());
-                            }
-                            "0" => {
-                                e.prevent_default();
-                                on_zoom_reset.run(());
-                            }
-                            _ => {}
                         }
-                    }
-                })
+                    },
+                )
             };
-            let _ = window.add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref());
+            let _ = window
+                .add_event_listener_with_callback("keydown", on_keydown.as_ref().unchecked_ref());
             on_keydown.forget();
 
             // Native Tauri Event Listeners (macOS System Menu)
             if let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
                 && let Ok(event_obj) = js_sys::Reflect::get(&tauri_obj, &JsValue::from_str("event"))
-                && let Ok(listen_fn) = js_sys::Reflect::get(&event_obj, &JsValue::from_str("listen"))
+                && let Ok(listen_fn) =
+                    js_sys::Reflect::get(&event_obj, &JsValue::from_str("listen"))
                 && let Ok(func) = listen_fn.dyn_into::<js_sys::Function>()
             {
                 // OS Menu: Zoom In
@@ -136,7 +140,11 @@ pub fn LegacyHmiView(
                         on_zoom_in.run(());
                     })
                 };
-                let _ = func.call2(&event_obj, &JsValue::from_str("hmi-zoom-in"), on_zin.as_ref().unchecked_ref());
+                let _ = func.call2(
+                    &event_obj,
+                    &JsValue::from_str("hmi-zoom-in"),
+                    on_zin.as_ref().unchecked_ref(),
+                );
                 on_zin.forget();
 
                 // OS Menu: Zoom Out
@@ -146,7 +154,11 @@ pub fn LegacyHmiView(
                         on_zoom_out.run(());
                     })
                 };
-                let _ = func.call2(&event_obj, &JsValue::from_str("hmi-zoom-out"), on_zout.as_ref().unchecked_ref());
+                let _ = func.call2(
+                    &event_obj,
+                    &JsValue::from_str("hmi-zoom-out"),
+                    on_zout.as_ref().unchecked_ref(),
+                );
                 on_zout.forget();
 
                 // OS Menu: Zoom Reset
@@ -156,7 +168,11 @@ pub fn LegacyHmiView(
                         on_zoom_reset.run(());
                     })
                 };
-                let _ = func.call2(&event_obj, &JsValue::from_str("hmi-zoom-reset"), on_zreset.as_ref().unchecked_ref());
+                let _ = func.call2(
+                    &event_obj,
+                    &JsValue::from_str("hmi-zoom-reset"),
+                    on_zreset.as_ref().unchecked_ref(),
+                );
                 on_zreset.forget();
             }
         }
@@ -167,10 +183,8 @@ pub fn LegacyHmiView(
         async fn sleep_ms(millis: i32) {
             let promise = js_sys::Promise::new(&mut |resolve, _| {
                 if let Some(window) = web_sys::window() {
-                    let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-                        &resolve,
-                        millis,
-                    );
+                    let _ = window
+                        .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, millis);
                 }
             });
             let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
@@ -186,16 +200,19 @@ pub fn LegacyHmiView(
                     // If not connected yet in Tauri desktop environment, try auto-discovery if address is default
                     if check_discovery {
                         let current = master_address.get_untracked();
-                        if current == "127.0.0.1:3000" || current.is_empty() {
-                            if let Ok(discovered) = crate::adapters::tauri::invoke_discover_master(Some(2)).await {
-                                if !discovered.is_empty() && discovered != current {
-                                    add_log(format!("[AUTO-DISCOVERY] Wykryto Mastera w sieci: {discovered}"));
-                                    save_master_address(&discovered);
-                                    master_address.set(discovered);
-                                    check_discovery = false;
-                                    continue;
-                                }
-                            }
+                        if (current == "127.0.0.1:3000" || current.is_empty())
+                            && let Ok(discovered) =
+                                crate::adapters::tauri::invoke_discover_master(Some(2)).await
+                            && !discovered.is_empty()
+                            && discovered != current
+                        {
+                            add_log(format!(
+                                "[AUTO-DISCOVERY] Wykryto Mastera w sieci: {discovered}"
+                            ));
+                            save_master_address(&discovered);
+                            master_address.set(discovered);
+                            check_discovery = false;
+                            continue;
                         }
                     }
 
@@ -218,7 +235,8 @@ pub fn LegacyHmiView(
         let target_addr = target_addr.trim();
 
         // Support formats like "127.0.0.1:3000", "ws://127.0.0.1:3000", "http://127.0.0.1:3000"
-        let websocket_url = if target_addr.starts_with("ws://") || target_addr.starts_with("wss://") {
+        let websocket_url = if target_addr.starts_with("ws://") || target_addr.starts_with("wss://")
+        {
             if target_addr.ends_with("/ws") {
                 target_addr.to_string()
             } else {
@@ -250,8 +268,11 @@ pub fn LegacyHmiView(
                     connected_clone.set(true);
                     add_log("Połączono z serwerem Master.".to_string());
 
-                    let handshake =
-                        ClientPacket::new(ClientEvent::HandshakeRequest, 0, client_device.to_bytes());
+                    let handshake = ClientPacket::new(
+                        ClientEvent::HandshakeRequest,
+                        0,
+                        client_device.to_bytes(),
+                    );
                     let _ = command_tx_open.unbounded_send(handshake);
                 }) as Box<dyn FnMut(JsValue)>);
                 websocket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
@@ -348,7 +369,8 @@ pub fn LegacyHmiView(
                                         }
                                         games_changed = true;
 
-                                        let current_id = current_game_clone.with_untracked(Game::id);
+                                        let current_id =
+                                            current_game_clone.with_untracked(Game::id);
                                         if current_id == game.id() || current_id == 0 {
                                             current_game_clone.set(game);
                                         }
@@ -372,8 +394,7 @@ pub fn LegacyHmiView(
                                         let is_new = if let Some(existing) =
                                             device_list.iter_mut().find(|d| {
                                                 d.serial_number() == updated_dev.serial_number()
-                                            })
-                                        {
+                                            }) {
                                             let changed = *existing != updated_dev;
                                             *existing = updated_dev;
                                             changed
@@ -397,8 +418,9 @@ pub fn LegacyHmiView(
                                 }
                                 ServerEvent::DeviceDisconnect => {
                                     if let Ok(dc_dev) = Device::try_from(packet) {
-                                        device_list
-                                            .retain(|d| d.serial_number() != dc_dev.serial_number());
+                                        device_list.retain(|d| {
+                                            d.serial_number() != dc_dev.serial_number()
+                                        });
                                         devices_changed = true;
                                         add_log(format!(
                                             "[ROZŁĄCZONO] {:?}",
@@ -469,14 +491,17 @@ pub fn LegacyHmiView(
 
             command_sender.set(Some(command_tx));
         } else {
-            add_log(format!("[WS] Nieprawidłowy adres WebSocket: {}", websocket_url));
+            add_log(format!(
+                "[WS] Nieprawidłowy adres WebSocket: {}",
+                websocket_url
+            ));
         }
     });
 
     // Helper for dispatching ClientPackets
     let send_client_packet = {
         let seq_arc = sequence_id.clone();
-        Arc::new(move |event: ClientEvent, payload: [u8; 59]| {
+        Arc::new(move |event: ClientEvent, payload: [u8; DATA_SIZE]| {
             if let Some(sender) = command_sender.get().as_ref() {
                 let current_seq = seq_arc.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
 
@@ -631,7 +656,10 @@ pub fn LegacyHmiView(
     let on_open_wifi_for_device = Callback::new(move |device: Device| {
         let sn = device.serial_number().unwrap_or("sn-hmi-0000").to_string();
         let id = device.device_id().unwrap_or("hmi-worker").to_string();
-        add_log(format!("[UI] Otwieranie konfiguracji Wi-Fi dla urządzenia: {}", sn));
+        add_log(format!(
+            "[UI] Otwieranie konfiguracji Wi-Fi dla urządzenia: {}",
+            sn
+        ));
         wifi_modal_sn.set(sn);
         wifi_modal_id.set(id);
         wifi_target_ip.set("192.168.4.1".to_string());
@@ -647,7 +675,9 @@ pub fn LegacyHmiView(
     let on_submit_wifi_config = Callback::new(
         move |(ip, sn, id, ssid, pass): (String, String, String, String, String)| {
             wifi_loading.set(true);
-            wifi_status_msg.set(Some("Wysyłanie pakietu DeviceConfigSet przez UDP...".to_string()));
+            wifi_status_msg.set(Some(
+                "Wysyłanie pakietu DeviceConfigSet przez UDP...".to_string(),
+            ));
 
             wasm_bindgen_futures::spawn_local(async move {
                 match invoke_send_device_config(ip, sn, id, ssid, pass).await {

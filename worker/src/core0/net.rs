@@ -68,15 +68,27 @@ impl Net {
         };
 
         for attempt in 1..=max_retries {
-            defmt::info!("Connecting to Wi-Fi '{}' (attempt {}/{})", ssid, attempt, max_retries);
-            if control.join(ssid, JoinOptions::new(password_bytes)).await.is_ok() {
+            defmt::info!(
+                "Connecting to Wi-Fi '{}' (attempt {}/{})",
+                ssid,
+                attempt,
+                max_retries
+            );
+            if control
+                .join(ssid, JoinOptions::new(password_bytes))
+                .await
+                .is_ok()
+            {
                 defmt::info!("Wi-Fi association successful!");
                 return true;
             }
             Timer::after_secs(1).await;
         }
 
-        defmt::warn!("Failed to associate with Wi-Fi after {} attempts", max_retries);
+        defmt::warn!(
+            "Failed to associate with Wi-Fi after {} attempts",
+            max_retries
+        );
         false
     }
 

@@ -116,7 +116,10 @@ impl DeviceConfigPacket {
             return Err("event");
         }
 
-        let mut expected_crc = CONFIG_PACKET_MAGIC ^ bytes[layout::EVENT] ^ bytes[layout::SEQUENCE_ID] ^ bytes[layout::VERSION];
+        let mut expected_crc = CONFIG_PACKET_MAGIC
+            ^ bytes[layout::EVENT]
+            ^ bytes[layout::SEQUENCE_ID]
+            ^ bytes[layout::VERSION];
         for &b in &bytes[4..164] {
             expected_crc ^= b;
         }

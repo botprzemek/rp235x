@@ -32,4 +32,3 @@ pub enum NetworkNotification {
     Log(String),
     Error(String),
 }
-

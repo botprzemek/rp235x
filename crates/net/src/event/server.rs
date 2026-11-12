@@ -6,6 +6,7 @@ define_event! {
     /// Event code sent by the server in a [`crate::ServerPacket`].
     pub enum ServerEvent {
         HandshakeAck = 0x81,
+        HeartbeatAck = 0x82,
 
         GameUpdate = 0xc0,
         GameListUpdate = 0xc1,

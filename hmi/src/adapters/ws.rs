@@ -2,8 +2,8 @@
 
 use core::net::SocketAddr;
 
-use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::StreamExt;
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use net::layout::PACKET_SIZE;
 use net::{ClientHandler, ClientPacket, Device, DeviceType, RawConnection, ServerPacket};
 
@@ -123,4 +123,3 @@ impl ClientHandler for HmiClientHandler {
         None
     }
 }
-

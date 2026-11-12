@@ -124,7 +124,9 @@ macro_rules! define_packets {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! _ignore_payload {
-    ($ty:ty) => { _ };
+    ($ty:ty) => {
+        _
+    };
 }
 
 #[doc(hidden)]

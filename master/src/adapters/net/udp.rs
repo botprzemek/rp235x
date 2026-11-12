@@ -3,19 +3,22 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::services::{Observable, Services};
 
 use basketball::{Discipline, Game};
 use config::DeviceConfig;
-use net::layout::PACKET_SIZE;
-use net::{ClientEvent, ClientPacket, Device, ServerEvent, ServerPacket};
+use net::layout::{DATA_SIZE, PACKET_SIZE};
+use net::{
+    ClientEvent, ClientPacket, Device, HandshakeAck, HeartbeatAck, ServerEvent, ServerPacket,
+};
 use tokio::net::UdpSocket;
 use tokio::sync::{mpsc, watch};
 use tokio::time::{self, MissedTickBehavior};
 
 const SYNC_HEARTBEAT_DURATION: Duration = Duration::from_millis(100); // 10 Hz periodic sync (event-driven broadcast handles immediate updates)
+const WORKER_TIMEOUT_DURATION: Duration = Duration::from_secs(9); // 9 seconds without heartbeat -> offline
 const OUTBOUND_QUEUE_CAPACITY: usize = 4096;
 
 #[derive(Clone)]
@@ -23,6 +26,7 @@ struct ActiveWorker {
     address: SocketAddr,
     serial_number: String,
     session_token: u32,
+    last_seen: Instant,
 }
 
 struct OutboundAck {
@@ -64,8 +68,45 @@ impl WorkerDriver {
         // Dedicated receive task: non-blocking packet ingestion into processing pipeline
         let receive_socket = Arc::clone(&self.listener);
         let receive_services = Arc::clone(&services);
+        let worker_tx_incoming = worker_tx.clone();
         tokio::spawn(async move {
-            Self::handle_incoming(receive_socket, receive_services, worker_tx, outbound_tx).await;
+            Self::handle_incoming(
+                receive_socket,
+                receive_services,
+                worker_tx_incoming,
+                outbound_tx,
+            )
+            .await;
+        });
+
+        // Periodic worker timeout check task: detects dead workers after 9s without heartbeat
+        let timeout_services = Arc::clone(&services);
+        let worker_tx_timeout = worker_tx.clone();
+        tokio::spawn(async move {
+            let mut check_interval = time::interval(Duration::from_secs(1));
+            loop {
+                check_interval.tick().await;
+                let now = Instant::now();
+                let mut expired_serials = Vec::new();
+
+                worker_tx_timeout.send_modify(|workers| {
+                    workers.retain(|sn, worker| {
+                        if now.duration_since(worker.last_seen) > WORKER_TIMEOUT_DURATION {
+                            expired_serials.push(sn.clone());
+                            false
+                        } else {
+                            true
+                        }
+                    });
+                });
+
+                for sn in expired_serials {
+                    println!(
+                        "WARN: [UDP] Worker sn={sn} timed out (no heartbeat for 9s). Marked as offline."
+                    );
+                    timeout_services.devices().disconnect_by_serial(&sn);
+                }
+            }
         });
 
         // Periodic tick broadcast task
@@ -93,7 +134,7 @@ impl WorkerDriver {
         worker_tx: watch::Sender<HashMap<String, ActiveWorker>>,
         outbound_tx: mpsc::Sender<OutboundAck>,
     ) {
-        let mut sequence_id: u8 = 0;
+        let mut sequence_id: u16 = 0;
         let mut receive_buffer = [0u8; PACKET_SIZE];
         let mut disconnect_rx = services.devices().subscribe_disconnect();
 
@@ -120,57 +161,88 @@ impl WorkerDriver {
                         continue;
                     };
 
-                    if let ClientEvent::HandshakeRequest | ClientEvent::HandshakeHeartbeat = packet.event() {
-                        let mut device = match Device::try_from(packet) {
-                            Ok(device) => device,
-                            Err(error) => {
+                    match packet.event() {
+                        ClientEvent::HandshakeHeartbeat => {
+                            let packet_token = packet.session_token();
+                            if packet_token == 0 {
+                                continue;
+                            }
+
+                            let now = Instant::now();
+                            let mut matched_worker: Option<ActiveWorker> = None;
+
+                            worker_tx.send_modify(|workers| {
+                                for worker in workers.values_mut() {
+                                    if worker.address == remote_address && worker.session_token == packet_token {
+                                        worker.last_seen = now;
+                                        matched_worker = Some(worker.clone());
+                                        break;
+                                    }
+                                }
+                            });
+
+                            if let Some(worker) = matched_worker {
+                                sequence_id = sequence_id.wrapping_add(1);
+                                let ack_payload = HeartbeatAck::new(sequence_id, 0);
+
+                                let ack_packet = ServerPacket::with_session(
+                                    ServerEvent::HeartbeatAck,
+                                    sequence_id,
+                                    worker.session_token,
+                                    HeartbeatAck::PAYLOAD_LEN,
+                                    ack_payload.to_bytes(),
+                                );
+
+                                let _ = outbound_tx.try_send(OutboundAck {
+                                    packet_bytes: ack_packet.to_bytes(),
+                                    target: remote_address,
+                                });
+                            }
+                        }
+                        ClientEvent::HandshakeRequest => {
+                            let mut device = match Device::try_from(packet) {
+                                Ok(device) => device,
+                                Err(error) => {
+                                    eprintln!(
+                                        "WARN: [UDP {remote_address}] Invalid worker handshake payload: {error}"
+                                    );
+                                    continue;
+                                }
+                            };
+
+                            let assigned_game_id = match device.serial_number() {
+                                Ok(serial) => services.devices().game_id_by_serial(serial).unwrap_or(0),
+                                Err(_) => continue,
+                            };
+                            device.set_game_id(assigned_game_id);
+
+                            let Ok(serial_ref) = device.serial_number() else {
+                                continue;
+                            };
+
+                            if let Err(error) = services.devices().validate_and_register(device) {
                                 eprintln!(
-                                    "WARN: [UDP {remote_address}] Invalid worker handshake payload: {error}"
+                                    "WARN: [UDP {remote_address}] Worker device validation failed: {error}"
                                 );
                                 continue;
                             }
-                        };
 
-                        let assigned_game_id = match device.serial_number() {
-                            Ok(serial) => services.devices().game_id_by_serial(serial).unwrap_or(0),
-                            Err(_) => continue,
-                        };
-                        device.set_game_id(assigned_game_id);
-
-                        let Ok(serial_ref) = device.serial_number() else {
-                            continue;
-                        };
-
-                        if let Err(error) = services.devices().validate_and_register(device) {
-                            eprintln!(
-                                "WARN: [UDP {remote_address}] Worker device validation failed: {error}"
-                            );
-                            continue;
-                        }
-
-                        // Check if this worker is already known with the same address
-                        let (session_token, is_new_or_moved) = {
-                            let workers_guard = worker_tx.borrow();
-                            match workers_guard.get(serial_ref) {
-                                Some(existing) => (existing.session_token, existing.address != remote_address),
-                                None => {
-                                    let new_token = (SystemTime::now()
-                                        .duration_since(SystemTime::UNIX_EPOCH)
-                                        .unwrap_or_default()
-                                        .as_nanos() as u32)
-                                        | 0x8000_0000;
-                                    (new_token, true)
+                            let now = Instant::now();
+                            // Check if this worker is already known with the same address
+                            let (session_token, is_new_or_moved) = {
+                                let workers_guard = worker_tx.borrow();
+                                match workers_guard.get(serial_ref) {
+                                    Some(existing) => (existing.session_token, existing.address != remote_address),
+                                    None => {
+                                        let new_token = (SystemTime::now()
+                                            .duration_since(SystemTime::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_nanos() as u32)
+                                            | 0x8000_0000;
+                                        (new_token, true)
+                                    }
                                 }
-                            }
-                        };
-
-                        if is_new_or_moved {
-                            println!(
-                                "INFO: [UDP {remote_address}] Connected worker {:?} (id={}, sn={serial_ref}, game_id={})",
-                                device.device_type(),
-                                device.device_id().unwrap_or("unknown"),
-                                device.game_id(),
-                            );
+                            };
 
                             let serial_string = serial_ref.to_string();
                             worker_tx.send_modify(|workers| {
@@ -180,32 +252,57 @@ impl WorkerDriver {
                                         address: remote_address,
                                         serial_number: serial_string,
                                         session_token,
+                                        last_seen: now,
                                     },
                                 );
                             });
+
+                            if is_new_or_moved {
+                                println!(
+                                    "INFO: [UDP {remote_address}] Connected worker {:?} (id={}, sn={serial_ref}, game_id={})",
+                                    device.device_type(),
+                                    device.device_id().unwrap_or("unknown"),
+                                    device.game_id(),
+                                );
+                            }
+
+                            sequence_id = sequence_id.wrapping_add(1);
+
+                            // Send HandshakeAck with dedicated HandshakeAck payload
+                            let handshake_ack = HandshakeAck::new(assigned_game_id, 0);
+
+                            let ack_packet = ServerPacket::with_session(
+                                ServerEvent::HandshakeAck,
+                                sequence_id,
+                                session_token,
+                                HandshakeAck::PAYLOAD_LEN,
+                                handshake_ack.to_bytes(),
+                            );
+
+                            let _ = outbound_tx.try_send(OutboundAck {
+                                packet_bytes: ack_packet.to_bytes(),
+                                target: remote_address,
+                            });
+
+                            // Immediately follow up with the full GameUpdate if a game is assigned
+                            if assigned_game_id != 0
+                                && let Some(game) = services.game().by_id(assigned_game_id)
+                            {
+                                sequence_id = sequence_id.wrapping_add(1);
+                                let game_packet = ServerPacket::with_session(
+                                    ServerEvent::GameUpdate,
+                                    sequence_id,
+                                    session_token,
+                                    DATA_SIZE as u8,
+                                    game.to_bytes(),
+                                );
+                                let _ = outbound_tx.try_send(OutboundAck {
+                                    packet_bytes: game_packet.to_bytes(),
+                                    target: remote_address,
+                                });
+                            }
                         }
-
-                        sequence_id = sequence_id.wrapping_add(1);
-
-                        let mut current_game = if assigned_game_id != 0 {
-                            services.game().by_id(assigned_game_id)
-                        } else {
-                            None
-                        }
-                        .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5v5));
-                        current_game.set_session_token(session_token);
-
-                        let ack_packet = ServerPacket::new(
-                            ServerEvent::HandshakeAck,
-                            sequence_id,
-                            current_game.to_bytes(),
-                        );
-
-                        // Asynchronous, non-blocking enqueue of the ACK packet
-                        let _ = outbound_tx.try_send(OutboundAck {
-                            packet_bytes: ack_packet.to_bytes(),
-                            target: remote_address,
-                        });
+                        _ => {}
                     }
                 }
 
@@ -232,7 +329,8 @@ impl WorkerDriver {
     ) {
         let mut interval = time::interval(SYNC_HEARTBEAT_DURATION);
         interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        let mut sequence_id: u8 = 0;
+        let mut sequence_id: u16 = 0;
+        let mut last_sent_games: HashMap<u16, Game> = HashMap::new();
         let mut broadcast_rx = services.game().subscribe();
         let mut game_assign_rx = services.devices().subscribe_game_assign();
 
@@ -247,34 +345,45 @@ impl WorkerDriver {
                             .game_id_by_serial(&worker.serial_number)
                             .unwrap_or(0);
                         if assigned_game_id != 0
-                            && let Some(mut current_game) = services.game().by_id(assigned_game_id)
+                            && let Some(current_game) = services.game().by_id(assigned_game_id)
                         {
-                            current_game.set_session_token(worker.session_token);
-                            sequence_id = sequence_id.wrapping_add(1);
-                            let packet = ServerPacket::new(
-                                ServerEvent::GameUpdate,
-                                sequence_id,
-                                current_game.to_bytes(),
-                            );
-                            let _ = socket.send_to(&packet.to_bytes(), worker.address).await;
+                            let should_send = match last_sent_games.get(&assigned_game_id) {
+                                Some(prev) => prev != &current_game,
+                                None => true,
+                            };
+
+                            if should_send {
+                                last_sent_games.insert(assigned_game_id, current_game);
+                                sequence_id = sequence_id.wrapping_add(1);
+                                let packet = ServerPacket::with_session(
+                                    ServerEvent::GameUpdate,
+                                    sequence_id,
+                                    worker.session_token,
+                                    DATA_SIZE as u8,
+                                    current_game.to_bytes(),
+                                );
+                                let _ = socket.send_to(&packet.to_bytes(), worker.address).await;
+                            }
                         }
                     }
                 }
 
                 Ok(assignment) = game_assign_rx.recv() => {
                     if let Some(worker) = active_workers.get(&assignment.serial_number) {
-                        let mut game = if assignment.game_id != 0 {
+                        let game = if assignment.game_id != 0 {
                             services.game().by_id(assignment.game_id)
                         } else {
                             None
                         }
                         .unwrap_or_else(|| Game::new_with_id(0, Discipline::Fiba5v5));
-                        game.set_session_token(worker.session_token);
 
+                        last_sent_games.insert(assignment.game_id, game);
                         sequence_id = sequence_id.wrapping_add(1);
-                        let packet = ServerPacket::new(
+                        let packet = ServerPacket::with_session(
                             ServerEvent::GameUpdate,
                             sequence_id,
+                            worker.session_token,
+                            DATA_SIZE as u8,
                             game.to_bytes(),
                         );
                         let _ = socket.send_to(&packet.to_bytes(), worker.address).await;
@@ -289,16 +398,25 @@ impl WorkerDriver {
                                 .game_id_by_serial(&worker.serial_number)
                                 .unwrap_or(0);
                             if assigned_game_id != 0
-                                && let Some(mut game) = games.iter().find(|entry| entry.id() == assigned_game_id).copied()
+                                && let Some(game) = games.iter().find(|entry| entry.id() == assigned_game_id).copied()
                             {
-                                game.set_session_token(worker.session_token);
-                                sequence_id = sequence_id.wrapping_add(1);
-                                let packet = ServerPacket::new(
-                                    ServerEvent::GameUpdate,
-                                    sequence_id,
-                                    game.to_bytes(),
-                                );
-                                let _ = socket.send_to(&packet.to_bytes(), worker.address).await;
+                                let should_send = match last_sent_games.get(&assigned_game_id) {
+                                    Some(prev) => prev != &game,
+                                    None => true,
+                                };
+
+                                if should_send {
+                                    last_sent_games.insert(assigned_game_id, game);
+                                    sequence_id = sequence_id.wrapping_add(1);
+                                    let packet = ServerPacket::with_session(
+                                        ServerEvent::GameUpdate,
+                                        sequence_id,
+                                        worker.session_token,
+                                        DATA_SIZE as u8,
+                                        game.to_bytes(),
+                                    );
+                                    let _ = socket.send_to(&packet.to_bytes(), worker.address).await;
+                                }
                             }
                         }
                     }

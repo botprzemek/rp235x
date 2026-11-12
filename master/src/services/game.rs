@@ -172,7 +172,7 @@ impl GameService {
         tokio::spawn(async move {
             let mut interval = time::interval(TICK_RATE);
             interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-            let mut sequence_id: u8 = 0;
+            let mut sequence_id: u16 = 0;
             let mut tick_counter: u32 = 0;
 
             loop {
@@ -236,7 +236,7 @@ impl GameService {
     fn publish_frames(
         cache: &RwLock<Vec<Option<ActiveGame>>>,
         frames: &RwLock<HashMap<u16, watch::Sender<Option<GameFrame>>>>,
-        sequence_id: u8,
+        sequence_id: u16,
     ) {
         let frames = frames
             .read()

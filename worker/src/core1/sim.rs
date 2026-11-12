@@ -38,7 +38,7 @@ impl LinuxScoreboardSimulator {
         let color: Color = RED;
 
         // Use the exact firmware layout logic:
-        self.layout.render(&mut self.display, game, color);
+        self.layout.render(&mut self.display, game, color, true);
 
         // Render terminal representation of the scoreboard
         self.print_terminal_view(game);

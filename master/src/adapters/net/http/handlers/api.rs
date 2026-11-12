@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use crate::services::Services;
 
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::Json;
 use axum::response::IntoResponse;
 use axum::routing::{self, Router};
 use basketball::{Score, Team};

@@ -6,4 +6,3 @@ use leptos::prelude::*;
 pub fn TeamPanel() -> impl IntoView {
     view! { <div/> }
 }
-

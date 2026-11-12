@@ -12,4 +12,3 @@ pub fn MatrixView() -> impl IntoView {
 }
 
 pub use MatrixView as MatrixSimulator;
-

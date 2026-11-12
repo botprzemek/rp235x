@@ -39,8 +39,6 @@ pub struct Game {
 
     regulation_millis: u32,
     clock_millis: u32,
-
-    session_token: u32,
 }
 
 impl Default for Game {
@@ -109,7 +107,6 @@ impl Game {
             away_score: 0,
             regulation_millis: config.regulation_millis,
             clock_millis: config.clock_millis,
-            session_token: 0,
         }
     }
 
@@ -125,7 +122,6 @@ impl Game {
             away_score: 0,
             regulation_millis: 0,
             clock_millis: 0,
-            session_token: 0,
         }
     }
 
@@ -174,7 +170,6 @@ impl Game {
         let mut regulation_millis = [0u8; 4];
         let mut clock_millis = [0u8; 4];
         let mut id_bytes = [0u8; 2];
-        let mut session_token_bytes = [0u8; 4];
 
         home_score.copy_from_slice(&bytes[layout::HOME_SCORE_START..layout::HOME_SCORE_END]);
         away_score.copy_from_slice(&bytes[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END]);
@@ -184,8 +179,6 @@ impl Game {
         );
         clock_millis.copy_from_slice(&bytes[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]);
         id_bytes.copy_from_slice(&bytes[layout::ID_START..layout::ID_END]);
-        session_token_bytes
-            .copy_from_slice(&bytes[layout::SESSION_TOKEN_START..layout::SESSION_TOKEN_END]);
 
         let raw_id = u16::from_be_bytes(id_bytes);
         let id = if raw_id == 0 { 1 } else { raw_id };
@@ -201,7 +194,6 @@ impl Game {
 
             regulation_millis: u32::from_be_bytes(regulation_millis),
             clock_millis: u32::from_be_bytes(clock_millis),
-            session_token: u32::from_be_bytes(session_token_bytes),
         })
     }
 
@@ -219,7 +211,6 @@ impl Game {
         let regulation_millis_bytes = self.regulation_millis.to_be_bytes();
         let clock_millis_bytes = self.clock_millis.to_be_bytes();
         let id_bytes = self.id.to_be_bytes();
-        let session_token_bytes = self.session_token.to_be_bytes();
 
         bytes[layout::HOME_SCORE_START..layout::HOME_SCORE_END].copy_from_slice(&home_score_bytes);
         bytes[layout::AWAY_SCORE_START..layout::AWAY_SCORE_END].copy_from_slice(&away_score_bytes);
@@ -228,21 +219,8 @@ impl Game {
         bytes[layout::CLOCK_MILLIS_START..layout::CLOCK_MILLIS_END]
             .copy_from_slice(&clock_millis_bytes);
         bytes[layout::ID_START..layout::ID_END].copy_from_slice(&id_bytes);
-        bytes[layout::SESSION_TOKEN_START..layout::SESSION_TOKEN_END]
-            .copy_from_slice(&session_token_bytes);
 
         bytes
-    }
-
-    /// Returns the session authentication token.
-    #[must_use]
-    pub fn session_token(&self) -> u32 {
-        self.session_token
-    }
-
-    /// Sets the session authentication token.
-    pub fn set_session_token(&mut self, token: u32) {
-        self.session_token = token;
     }
 
     /// Returns the current [`State`] of the game.
@@ -358,5 +336,46 @@ impl Game {
     /// Resumes (starts) the game clock.
     pub fn resume(&mut self) {
         self.set_state(State::Running);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_game_score_and_quarters() {
+        let mut game = Game::new(Discipline::Fiba5v5);
+        assert_eq!(game.quarter(), Quarter::Q1);
+        assert_eq!(game.score(Team::Home), 0);
+        assert_eq!(game.score(Team::Away), 0);
+
+        game.add_score(Team::Home, Score::FieldGoal3);
+        game.add_score(Team::Away, Score::FieldGoal2);
+        assert_eq!(game.score(Team::Home), 3);
+        assert_eq!(game.score(Team::Away), 2);
+
+        // Serialization roundtrip
+        let bytes = game.to_bytes();
+        let restored = Game::from_bytes(&bytes).expect("valid game");
+        assert_eq!(restored.score(Team::Home), 3);
+        assert_eq!(restored.score(Team::Away), 2);
+    }
+
+    #[test]
+    fn test_clock_tick_and_quarter_transition() {
+        let mut game = Game::new(Discipline::Fiba5v5);
+        game.resume();
+        assert_eq!(game.state(), State::Running);
+
+        // Tick 1 second
+        let initial_millis = game.regulation_millis();
+        game.tick(Duration::from_secs(1));
+        assert_eq!(game.regulation_millis(), initial_millis - 1000);
+
+        // Fast forward remainder of Q1
+        game.tick(Duration::from_millis(game.regulation_millis() as u64));
+        assert_eq!(game.quarter(), Quarter::Q2);
+        assert_eq!(game.state(), State::Paused);
     }
 }

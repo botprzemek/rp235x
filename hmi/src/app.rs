@@ -28,21 +28,24 @@ pub fn App() -> impl IntoView {
             let on_blur = Closure::<dyn FnMut()>::new(move || {
                 is_focused.set(false);
             });
-            let _ = window.add_event_listener_with_callback("focus", on_focus.as_ref().unchecked_ref());
-            let _ = window.add_event_listener_with_callback("blur", on_blur.as_ref().unchecked_ref());
+            let _ =
+                window.add_event_listener_with_callback("focus", on_focus.as_ref().unchecked_ref());
+            let _ =
+                window.add_event_listener_with_callback("blur", on_blur.as_ref().unchecked_ref());
             on_focus.forget();
             on_blur.forget();
 
             if let Ok(tauri_obj) = js_sys::Reflect::get(&window, &JsValue::from_str("__TAURI__"))
                 && let Ok(event_obj) = js_sys::Reflect::get(&tauri_obj, &JsValue::from_str("event"))
-                && let Ok(listen_fn) = js_sys::Reflect::get(&event_obj, &JsValue::from_str("listen"))
+                && let Ok(listen_fn) =
+                    js_sys::Reflect::get(&event_obj, &JsValue::from_str("listen"))
                 && let Ok(func) = listen_fn.dyn_into::<js_sys::Function>()
             {
                 let on_tauri_focus = Closure::<dyn FnMut(JsValue)>::new(move |val: JsValue| {
-                    if let Ok(payload) = js_sys::Reflect::get(&val, &JsValue::from_str("payload")) {
-                        if let Some(focused) = payload.as_bool() {
-                            is_focused.set(focused);
-                        }
+                    if let Ok(payload) = js_sys::Reflect::get(&val, &JsValue::from_str("payload"))
+                        && let Some(focused) = payload.as_bool()
+                    {
+                        is_focused.set(focused);
                     }
                 });
                 let _ = func.call2(

@@ -3,11 +3,11 @@
 #[cfg(feature = "std")]
 use std::{format, println};
 
-use crate::{Config, ConfigError};
-#[cfg(feature = "std")]
-use crate::NetworkConfig;
 #[cfg(any(feature = "std", feature = "defmt"))]
 use crate::DeviceConfig;
+#[cfg(feature = "std")]
+use crate::NetworkConfig;
+use crate::{Config, ConfigError};
 
 #[cfg(all(feature = "defmt", not(feature = "std")))]
 use defmt::info;

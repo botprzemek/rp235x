@@ -187,7 +187,7 @@ async fn write_loop<W>(
 ) where
     W: PacketSender,
 {
-    let mut sequence_id: u8 = 0;
+    let mut sequence_id: u16 = 0;
     let mut session = Session::default();
     let mut frame_rx: Option<watch::Receiver<Option<GameFrame>>> = None;
 
@@ -332,7 +332,7 @@ async fn sync_devices_to_browser<W>(
     sender: &mut W,
     known_devices: &mut Vec<Device>,
     current_devices: Vec<Device>,
-    sequence_id: &mut u8,
+    sequence_id: &mut u16,
 ) where
     W: PacketSender,
 {
@@ -368,7 +368,7 @@ async fn sync_games_to_browser<W>(
     sender: &mut W,
     known_games: &mut Vec<Game>,
     current_games: Vec<Game>,
-    sequence_id: &mut u8,
+    sequence_id: &mut u16,
 ) where
     W: PacketSender,
 {

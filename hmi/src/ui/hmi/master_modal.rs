@@ -27,14 +27,19 @@ pub fn MasterServerModal(
     // Function to trigger discovery
     let start_discovery = move || {
         discovery_state.set(DiscoveryState::Searching);
-        status_msg.set(Some("Wyszukiwanie serwera Master w sieci lokalnej (UDP)...".to_string()));
+        status_msg.set(Some(
+            "Wyszukiwanie serwera Master w sieci lokalnej (UDP)...".to_string(),
+        ));
 
         spawn_local(async move {
             match invoke_discover_master(Some(4)).await {
                 Ok(discovered_addr) => {
                     discovery_state.set(DiscoveryState::Found);
                     address_input.set(discovered_addr.clone());
-                    status_msg.set(Some(format!("Znaleziono serwer Master: {}", discovered_addr)));
+                    status_msg.set(Some(format!(
+                        "Znaleziono serwer Master: {}",
+                        discovered_addr
+                    )));
                 }
                 Err(err) => {
                     discovery_state.set(DiscoveryState::TimedOut);

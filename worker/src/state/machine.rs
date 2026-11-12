@@ -55,7 +55,7 @@ impl SharedGameState {
     #[allow(dead_code)]
     pub fn update<F: FnOnce(&mut Game)>(&self, f: F) {
         critical_section::with(|cs| {
-            f(&mut *self.state.borrow(cs).borrow_mut());
+            f(&mut self.state.borrow(cs).borrow_mut());
         });
     }
 }
@@ -94,7 +94,7 @@ impl SharedGameState {
     #[inline]
     #[allow(dead_code)]
     pub fn update<F: FnOnce(&mut Game)>(&self, f: F) {
-        f(&mut *self.state.write().expect("game state write lock"));
+        f(&mut self.state.write().expect("game state write lock"));
     }
 }
 

@@ -6,4 +6,3 @@ use leptos::prelude::*;
 pub fn Timeouts() -> impl IntoView {
     view! { <div/> }
 }
-

@@ -67,6 +67,12 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>
         self.frame_buffer = [[[0, 0, 0]; WIDTH]; HEIGHT];
     }
 
+    /// Fills the entire framebuffer with a uniform `color`.
+    #[inline(always)]
+    pub fn fill(&mut self, color: Color) {
+        self.frame_buffer = [[color; WIDTH]; HEIGHT];
+    }
+
     /// Sets the pixel at `(x, y)` to `color` if within bounds.
     #[inline(always)]
     pub fn set_pixel(&mut self, x: usize, y: usize, color: Color) {
@@ -105,6 +111,11 @@ impl<const WIDTH: usize, const HEIGHT: usize, const HALF_HEIGHT: usize>
                 }
             }
         }
+    }
+
+    /// Renders an ASCII `text` string as a knockout mask, clearing text glyph pixels to `BLACK` (off).
+    pub fn draw_text_mask(&mut self, text: &str, start_x: i32, start_y: i32) {
+        self.draw_text(text, start_x, start_y, crate::color::BLACK);
     }
 
     /// Converts the RGB `frame_buffer` into BCM bitplanes with brightness scaling and gamma correction.

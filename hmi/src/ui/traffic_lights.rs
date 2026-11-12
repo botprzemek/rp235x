@@ -27,6 +27,7 @@ fn resolve_state(focused: bool, hovered: bool, pressed: bool) -> TrafficLightSta
 }
 
 /// Hook that distinguishes a quick click from a click-and-hold (long-press).
+#[allow(clippy::type_complexity)]
 fn use_click_and_hold(
     onclick: Callback<web_sys::MouseEvent>,
     onhold: Callback<()>,
@@ -65,13 +66,13 @@ fn use_click_and_hold(
             onhold.run(());
         }) as Box<dyn FnMut()>);
 
-        if let Some(w) = web_sys::window() {
-            if let Ok(id) = w.set_timeout_with_callback_and_timeout_and_arguments_0(
+        if let Some(w) = web_sys::window()
+            && let Ok(id) = w.set_timeout_with_callback_and_timeout_and_arguments_0(
                 cb.as_ref().unchecked_ref(),
                 hold_delay_ms,
-            ) {
-                timer_id.set_value(Some(id));
-            }
+            )
+        {
+            timer_id.set_value(Some(id));
         }
         cb.forget();
     };
@@ -262,14 +263,11 @@ pub fn TrafficLights(
     on_minimize: Callback<web_sys::MouseEvent>,
     #[prop(into, default = Callback::new(|_| invoke_tauri_window_command("window_toggle_maximize")))]
     on_maximize: Callback<web_sys::MouseEvent>,
-    #[prop(into, default = Callback::new(|_| ()))]
-    on_hold_close: Callback<()>,
-    #[prop(into, default = Callback::new(|_| ()))]
-    on_hold_minimize: Callback<()>,
+    #[prop(into, default = Callback::new(|_| ()))] on_hold_close: Callback<()>,
+    #[prop(into, default = Callback::new(|_| ()))] on_hold_minimize: Callback<()>,
     #[prop(into, default = Callback::new(|_| invoke_tauri_window_command("window_toggle_fullscreen")))]
     on_hold_maximize: Callback<()>,
-    #[prop(into, default = 500)]
-    hold_delay_ms: i32,
+    #[prop(into, default = 500)] hold_delay_ms: i32,
 ) -> impl IntoView {
     let hovered = RwSignal::new(false);
 
@@ -315,16 +313,12 @@ pub fn NavigationBar(
     on_minimize: Callback<web_sys::MouseEvent>,
     #[prop(into, default = Callback::new(|_| invoke_tauri_window_command("window_toggle_maximize")))]
     on_maximize: Callback<web_sys::MouseEvent>,
-    #[prop(into, default = Callback::new(|_| ()))]
-    on_hold_close: Callback<()>,
-    #[prop(into, default = Callback::new(|_| ()))]
-    on_hold_minimize: Callback<()>,
+    #[prop(into, default = Callback::new(|_| ()))] on_hold_close: Callback<()>,
+    #[prop(into, default = Callback::new(|_| ()))] on_hold_minimize: Callback<()>,
     #[prop(into, default = Callback::new(|_| invoke_tauri_window_command("window_toggle_fullscreen")))]
     on_hold_maximize: Callback<()>,
-    #[prop(into, default = 500)]
-    hold_delay_ms: i32,
-    #[prop(optional)]
-    right_action: Option<AnyView>,
+    #[prop(into, default = 500)] hold_delay_ms: i32,
+    #[prop(optional)] right_action: Option<AnyView>,
 ) -> impl IntoView {
     let on_start_drag = move |e: web_sys::MouseEvent| {
         if e.button() == 0 {

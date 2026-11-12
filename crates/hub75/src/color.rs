@@ -18,6 +18,9 @@ pub const WHITE: Color = [255, 255, 255];
 /// Pure black (off) RGB color.
 pub const BLACK: Color = [0, 0, 0];
 
+/// Coral red RGB color.
+pub const CORAL_RED: Color = [240, 80, 70];
+
 /// Scales RGB channels proportionally to `brightness_percent` (`0..=100`).
 #[must_use]
 #[inline(always)]

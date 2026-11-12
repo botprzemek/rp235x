@@ -9,4 +9,3 @@ pub use entry::Core1;
 pub use layout::ScoreboardLayout;
 #[cfg(not(feature = "rp235x"))]
 pub use sim::LinuxScoreboardSimulator;
-

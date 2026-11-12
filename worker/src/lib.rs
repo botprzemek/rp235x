@@ -4,7 +4,7 @@
 
 pub mod core0;
 pub mod core1;
-#[cfg(not(feature = "rp235x"))]
+#[cfg(feature = "linux")]
 pub mod sim;
 pub mod state;
 

@@ -8,6 +8,9 @@ use embassy_rp::{Peri, peripherals};
 /// RP235x GPIO pins assigned to the HUB75 panel interface.
 #[non_exhaustive]
 pub struct LedPeripherals {
+    pub pio: Peri<'static, peripherals::PIO1>,
+    pub dma: Peri<'static, peripherals::DMA_CH1>,
+
     pub r1: Peri<'static, peripherals::PIN_2>,
     pub g1: Peri<'static, peripherals::PIN_3>,
     pub b1: Peri<'static, peripherals::PIN_4>,
@@ -31,6 +34,8 @@ impl LedPeripherals {
     #[must_use]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        pio: Peri<'static, peripherals::PIO1>,
+        dma: Peri<'static, peripherals::DMA_CH1>,
         r1: Peri<'static, peripherals::PIN_2>,
         g1: Peri<'static, peripherals::PIN_3>,
         b1: Peri<'static, peripherals::PIN_4>,
@@ -47,6 +52,8 @@ impl LedPeripherals {
         oe: Peri<'static, peripherals::PIN_13>,
     ) -> Self {
         Self {
+            pio,
+            dma,
             r1,
             g1,
             b1,

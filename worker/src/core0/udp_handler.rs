@@ -3,25 +3,27 @@
 use crate::peripherals::flash::write_config_to_flash;
 use crate::state::{GAME_STATE, IS_CONNECTED_TO_MASTER};
 
-use basketball::{Game, Scorable};
-use core::sync::atomic::Ordering;
+use basketball::Game;
 use config::flash::FlashReader;
 use config::{Config, ConfigBuilder};
+use core::sync::atomic::Ordering;
 use embassy_net::udp::{PacketMetadata, UdpSocket};
 use embassy_net::{IpAddress, IpEndpoint, Stack};
+use embassy_rp::Peri;
 use embassy_rp::peripherals::{FLASH, WATCHDOG};
 use embassy_rp::watchdog::Watchdog;
-use embassy_rp::Peri;
 use embassy_time::{Duration, Ticker, Timer};
 use net::event::{ClientEvent, ServerEvent};
 use net::layout::PACKET_SIZE;
-use net::{ClientPacket, Device, DeviceConfigPacket, DeviceType, ServerPacket};
+use net::{
+    ClientPacket, Device, DeviceConfigPacket, DeviceType, HandshakeAck, Heartbeat, ServerPacket,
+};
 use static_cell::StaticCell;
 
 static UDP_RX_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
 static UDP_TX_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
 
-/// Background Embassy task running on port 8001.
+/// Background Embassy task running on port 9000.
 ///
 /// Handles:
 /// 1. `ClientEvent::DeviceConfigSet` - OTA Wi-Fi configuration updates over UDP.
@@ -50,18 +52,18 @@ pub async fn unified_udp_task(
         transmit_buffer,
     );
 
-    if let Err(error) = socket.bind(8001) {
+    if let Err(error) = socket.bind(9000) {
         defmt::error!("socket_error: {:?}", error);
         return;
     }
 
-    defmt::info!("[WORKER UDP] Bound to port 8001 (AP Mode: {})", is_ap_mode);
+    defmt::info!("[WORKER UDP] Bound to port 9000 (AP Mode: {})", is_ap_mode);
 
     let mut watchdog = Watchdog::new(watchdog_peri);
     let mut packet_buffer = [0u8; 512];
 
     if is_ap_mode {
-        // In AP mode, worker simply waits for DeviceConfigPacket or DeviceConfigSet packets on port 8001
+        // In AP mode, worker simply waits for DeviceConfigPacket or DeviceConfigSet packets on port 9000
         loop {
             let (size, remote_endpoint) = match socket.recv_from(&mut packet_buffer).await {
                 Ok(res) => res,
@@ -108,22 +110,19 @@ pub async fn unified_udp_task(
                 }
 
                 let receive_future = socket.recv_from(&mut packet_buffer);
-                let (size, remote_endpoint) = match embassy_time::with_timeout(
-                    Duration::from_millis(500),
-                    receive_future,
-                )
-                .await
-                {
-                    Ok(Ok((size, remote_endpoint))) => (size, remote_endpoint),
-                    Ok(Err(error)) => {
-                        defmt::info!("{}", error);
-                        continue;
-                    }
-                    Err(timeout_error) => {
-                        defmt::info!("{}", timeout_error);
-                        continue;
-                    }
-                };
+                let (size, remote_endpoint) =
+                    match embassy_time::with_timeout(Duration::from_millis(500), receive_future)
+                        .await
+                    {
+                        Ok(Ok((size, remote_endpoint))) => (size, remote_endpoint),
+                        Ok(Err(_)) => {
+                            continue;
+                        }
+                        Err(_) => {
+                            // Normal 500ms timeout while waiting for Master response - do not spam logs
+                            continue;
+                        }
+                    };
 
                 // Check if this is an incoming DeviceConfigPacket while waiting for master
                 if let Ok(config_pkt) = DeviceConfigPacket::from_bytes(&packet_buffer[..size]) {
@@ -150,24 +149,20 @@ pub async fn unified_udp_task(
                     continue;
                 };
 
-                let session_token = if let Ok(game) = Game::try_from(server_packet) {
-                    defmt::info!(
-                        "[CORE0 UDP] Initial Handshake Game: game_id={}, score={}:{}, time={}",
-                        game.id(),
-                        game.score(basketball::Team::Home),
-                        game.score(basketball::Team::Away),
-                        game.regulation_millis()
-                    );
-                    GAME_STATE.set(game);
-                    game.session_token()
-                } else {
-                    0
-                };
+                if server_packet.event() != ServerEvent::HandshakeAck {
+                    continue;
+                }
+
+                let session_token = server_packet.session_token();
+                let assigned_game_id = HandshakeAck::from_bytes(&server_packet.data())
+                    .map(|ack| ack.assigned_game_id())
+                    .unwrap_or(0);
 
                 defmt::info!(
-                    "[WORKER] Znaleziono mastera pod adresem: {}. Handshake zakończony (Token: {:x})!",
+                    "[WORKER] Znaleziono mastera pod adresem: {}. Handshake zakończony (Token: {:x}, GameId: {})!",
                     remote_endpoint,
-                    session_token
+                    session_token,
+                    assigned_game_id
                 );
                 IS_CONNECTED_TO_MASTER.store(true, Ordering::Release);
                 break (remote_endpoint.endpoint, session_token);
@@ -177,6 +172,7 @@ pub async fn unified_udp_task(
 
             let mut keepalive_timer = Ticker::every(Duration::from_secs(3));
             let mut missed_heartbeats: u8 = 0;
+            let mut sequence_id: u16 = 0;
             const MAX_MISSED_HEARTBEATS: u8 = 3;
 
             loop {
@@ -187,7 +183,9 @@ pub async fn unified_udp_task(
                     embassy_futures::select::Either::First(result) => match result {
                         Ok((size, remote_endpoint)) => {
                             // Check for OTA Wi-Fi configuration packet from HMI
-                            if let Ok(config_pkt) = DeviceConfigPacket::from_bytes(&packet_buffer[..size]) {
+                            if let Ok(config_pkt) =
+                                DeviceConfigPacket::from_bytes(&packet_buffer[..size])
+                            {
                                 handle_device_config(
                                     &mut socket,
                                     remote_endpoint,
@@ -207,35 +205,39 @@ pub async fn unified_udp_task(
                                 continue;
                             }
 
-                            missed_heartbeats = 0;
-
-                            let Ok(packet) = ServerPacket::from_bytes(packet_buffer[..PACKET_SIZE].try_into().unwrap_or([0; PACKET_SIZE])) else {
+                            let Ok(packet) = ServerPacket::from_bytes(
+                                packet_buffer[..PACKET_SIZE]
+                                    .try_into()
+                                    .unwrap_or([0; PACKET_SIZE]),
+                            ) else {
                                 continue;
                             };
 
-                            if let Ok(game) = Game::try_from(packet) {
-                                if packet.event() == ServerEvent::HandshakeAck {
-                                    session_token = game.session_token();
-                                    defmt::info!(
-                                        "[CORE0 UDP] HandshakeAck: game_id={}, score={}:{}, time={}",
-                                        game.id(),
-                                        game.score(basketball::Team::Home),
-                                        game.score(basketball::Team::Away),
-                                        game.regulation_millis()
-                                    );
-                                    GAME_STATE.set(game);
-                                } else if session_token == 0 || game.session_token() == 0 || game.session_token() == session_token {
-                                    defmt::info!(
-                                        "[CORE0 UDP] GameUpdate: game_id={}, score={}:{}, time={}",
-                                        game.id(),
-                                        game.score(basketball::Team::Home),
-                                        game.score(basketball::Team::Away),
-                                        game.regulation_millis()
-                                    );
-                                    GAME_STATE.set(game);
-                                } else {
-                                    defmt::warn!("[WORKER] Odrzucono pakiet UDP: nieprawidłowy token sesji! (expected {:x}, got {:x})", session_token, game.session_token());
+                            let packet_token = packet.session_token();
+                            if session_token != 0 && packet_token != session_token {
+                                defmt::warn!(
+                                    "[WORKER] Odrzucono pakiet UDP: nieprawidłowy token sesji!"
+                                );
+                                continue;
+                            }
+
+                            match packet.event() {
+                                ServerEvent::HeartbeatAck => {
+                                    missed_heartbeats = 0;
                                 }
+                                ServerEvent::HandshakeAck => {
+                                    missed_heartbeats = 0;
+                                    if packet_token != 0 {
+                                        session_token = packet_token;
+                                    }
+                                }
+                                ServerEvent::GameUpdate => {
+                                    missed_heartbeats = 0;
+                                    if let Ok(game) = Game::try_from(packet) {
+                                        GAME_STATE.set(game);
+                                    }
+                                }
+                                _ => {}
                             }
                         }
                         Err(error) => {
@@ -243,15 +245,20 @@ pub async fn unified_udp_task(
                         }
                     },
                     embassy_futures::select::Either::Second(()) => {
-                        let keepalive_packet =
-                            ClientPacket::new(ClientEvent::HandshakeHeartbeat, 0, device_bytes);
+                        sequence_id = sequence_id.wrapping_add(1);
+                        let heartbeat_bytes = Heartbeat::new(0).to_bytes();
+                        let keepalive_packet = ClientPacket::with_session(
+                            ClientEvent::HandshakeHeartbeat,
+                            sequence_id,
+                            session_token,
+                            Heartbeat::PAYLOAD_LEN,
+                            heartbeat_bytes,
+                        );
                         let packet_bytes = keepalive_packet.to_bytes();
 
                         if let Err(error) = socket.send_to(&packet_bytes, master_endpoint).await {
                             defmt::error!("keepalive_send_error: {:?}", error);
                         } else {
-                            defmt::info!("[WORKER] Wysłano keepalive do mastera");
-
                             missed_heartbeats += 1;
                             if missed_heartbeats < MAX_MISSED_HEARTBEATS {
                                 continue;
@@ -277,21 +284,47 @@ async fn handle_device_config(
     flash_peri: Peri<'_, FLASH>,
     watchdog: &mut Watchdog,
 ) {
-    defmt::info!("[WORKER] Received DeviceConfigPacket from {}", remote_endpoint);
+    defmt::info!(
+        "[WORKER] Received DeviceConfigPacket from {}",
+        remote_endpoint
+    );
 
     // 1. Immediately send Ack
-    let ack_packet = ServerPacket::new(ServerEvent::DeviceConfigAck, 0, [0u8; net::layout::DATA_SIZE]);
-    let _ = socket.send_to(&ack_packet.to_bytes(), remote_endpoint.endpoint).await;
+    let ack_packet = ServerPacket::new(
+        ServerEvent::DeviceConfigAck,
+        0,
+        [0u8; net::layout::DATA_SIZE],
+    );
+    let _ = socket
+        .send_to(&ack_packet.to_bytes(), remote_endpoint.endpoint)
+        .await;
 
-    let Ok(sn) = packet.serial_number() else { return; };
-    let Ok(id) = packet.device_id() else { return; };
-    let Ok(ssid) = packet.wifi_ssid() else { return; };
-    let Ok(pass) = packet.wifi_password() else { return; };
+    let Ok(sn) = packet.serial_number() else {
+        return;
+    };
+    let Ok(id) = packet.device_id() else {
+        return;
+    };
+    let Ok(ssid) = packet.wifi_ssid() else {
+        return;
+    };
+    let Ok(pass) = packet.wifi_password() else {
+        return;
+    };
 
-    defmt::info!("[WORKER] Applying config: SN='{}', ID='{}', SSID='{}'", sn, id, ssid);
+    defmt::info!(
+        "[WORKER] Applying config: SN='{}', ID='{}', SSID='{}'",
+        sn,
+        id,
+        ssid
+    );
 
     let mut builder = ConfigBuilder::new();
-    builder.serial_number(sn).device_id(id).wifi_ssid(ssid).wifi_password(pass);
+    builder
+        .serial_number(sn)
+        .device_id(id)
+        .wifi_ssid(ssid)
+        .wifi_password(pass);
 
     let Ok(new_config) = builder.build() else {
         defmt::error!("[WORKER] Invalid Config fields");
@@ -307,7 +340,9 @@ async fn handle_device_config(
             0,
             [0u8; net::layout::DATA_SIZE],
         );
-        let _ = socket.send_to(&success_packet.to_bytes(), remote_endpoint.endpoint).await;
+        let _ = socket
+            .send_to(&success_packet.to_bytes(), remote_endpoint.endpoint)
+            .await;
 
         Timer::after_millis(300).await;
         defmt::info!("[WORKER] Rebooting via Watchdog into new network...");

@@ -112,7 +112,10 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
             }
             None => {
                 let default_path = ReDBProvider::default_path();
-                println!("INFO: Using default ReDB database at {}", default_path.display());
+                println!(
+                    "INFO: Using default ReDB database at {}",
+                    default_path.display()
+                );
                 ReDBProvider::open(&default_path)
             }
         };
@@ -152,8 +155,8 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
                 .expect("failed to bind UDP socket with socket2");
 
             let std_socket: std::net::UdpSocket = socket2_sock.into();
-            let socket = UdpSocket::from_std(std_socket)
-                .expect("failed to convert to tokio UdpSocket");
+            let socket =
+                UdpSocket::from_std(std_socket).expect("failed to convert to tokio UdpSocket");
 
             WorkerDriver::new(socket).spawn(Arc::clone(&services));
         }

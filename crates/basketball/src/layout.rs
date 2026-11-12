@@ -41,9 +41,3 @@ pub(crate) const ID_START: usize = 0x0f;
 
 /// End byte index (exclusive) of the game ID.
 pub(crate) const ID_END: usize = 0x11;
-
-/// Start byte index (inclusive) of the dynamic session authentication token.
-pub(crate) const SESSION_TOKEN_START: usize = 0x11;
-
-/// End byte index (exclusive) of the dynamic session authentication token.
-pub(crate) const SESSION_TOKEN_END: usize = 0x15;
