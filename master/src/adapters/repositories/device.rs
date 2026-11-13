@@ -58,7 +58,6 @@ impl Repository<[Device]> for DeviceRepository {
             }
         }
 
-        drop(table);
         transaction
             .commit()
             .expect("failed to commit devices transaction");
@@ -66,7 +65,6 @@ impl Repository<[Device]> for DeviceRepository {
 }
 
 impl DeviceRepository {
-
     #[must_use]
     pub fn new(database: ReDBProvider) -> Self {
         Self { database }

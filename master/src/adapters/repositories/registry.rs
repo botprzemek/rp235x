@@ -7,7 +7,6 @@ pub struct Registry {
 }
 
 pub trait Repository<Entity: ?Sized> {
-
     type Output;
 
     fn select(&self) -> Self::Output;
@@ -16,7 +15,6 @@ pub trait Repository<Entity: ?Sized> {
 }
 
 impl Registry {
-
     #[must_use]
     pub fn new(database: ReDBProvider) -> Self {
         let game = GameRepository::new(database.clone());

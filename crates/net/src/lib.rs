@@ -2,10 +2,12 @@
 
 mod data;
 pub mod event;
+pub mod game;
 pub mod layout;
 mod node;
 mod packet;
 pub mod protocol;
+pub mod session;
 mod transport;
 
 #[macro_use]

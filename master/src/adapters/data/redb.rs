@@ -23,7 +23,6 @@ impl Default for ReDBProvider {
 }
 
 impl ReDBProvider {
-
     #[must_use]
     pub fn default_path() -> PathBuf {
         if let Ok(path_str) = env::var("MASTER_DB_PATH") {

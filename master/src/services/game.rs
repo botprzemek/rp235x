@@ -102,7 +102,6 @@ impl Observable<Vec<Game>> for GameService {
 }
 
 impl GameService {
-
     #[must_use]
     pub fn new(game_repository: GameRepository) -> Self {
         let mut initial_games = game_repository.select();
