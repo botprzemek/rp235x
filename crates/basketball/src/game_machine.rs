@@ -1,10 +1,9 @@
 use core::marker::PhantomData;
 use core::time::Duration;
 
-use crate::{Discipline, Game, Quarter, Scorable, Score, State, Team};
+use crate::{Discipline, Game, Quarter, Score, ScoreRead, ScoreWrite, Scores, State, Team};
 
-pub mod match_state {
-
+pub mod state_machine {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Idle;
 
@@ -22,19 +21,18 @@ pub mod match_state {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Match<S> {
+pub struct GameMachine<S> {
     game: Game,
     _marker: PhantomData<S>,
 }
 
-impl Default for Match<match_state::Idle> {
+impl Default for GameMachine<state_machine::Idle> {
     fn default() -> Self {
         Self::new(Discipline::Fiba5v5)
     }
 }
 
-impl Match<match_state::Idle> {
-
+impl GameMachine<state_machine::Idle> {
     #[must_use]
     pub fn new(discipline: Discipline) -> Self {
         Self {
@@ -44,21 +42,20 @@ impl Match<match_state::Idle> {
     }
 
     #[must_use]
-    pub fn start(mut self) -> Match<match_state::Running> {
+    pub fn start(mut self) -> GameMachine<state_machine::Running> {
         self.game.set_state(State::Running);
-        Match {
+        GameMachine {
             game: self.game,
             _marker: PhantomData,
         }
     }
 }
 
-impl Match<match_state::Running> {
-
+impl GameMachine<state_machine::Running> {
     #[must_use]
-    pub fn pause(mut self) -> Match<match_state::Paused> {
+    pub fn pause(mut self) -> GameMachine<state_machine::Paused> {
         self.game.set_state(State::Paused);
-        Match {
+        GameMachine {
             game: self.game,
             _marker: PhantomData,
         }
@@ -67,14 +64,14 @@ impl Match<match_state::Running> {
     pub fn tick(
         mut self,
         delta: Duration,
-    ) -> Result<Match<match_state::Running>, Match<match_state::QuarterBreak>> {
+    ) -> Result<GameMachine<state_machine::Running>, GameMachine<state_machine::QuarterBreak>> {
         let delta_ms = delta.as_millis() as u32;
         let current_rem = self.game.regulation_millis();
 
         if delta_ms >= current_rem {
             self.game.tick(Duration::from_millis(current_rem as u64));
             self.game.set_state(State::QuarterEnd);
-            Err(Match {
+            Err(GameMachine {
                 game: self.game,
                 _marker: PhantomData,
             })
@@ -85,31 +82,29 @@ impl Match<match_state::Running> {
     }
 }
 
-impl Match<match_state::Paused> {
-
+impl GameMachine<state_machine::Paused> {
     #[must_use]
-    pub fn resume(mut self) -> Match<match_state::Running> {
+    pub fn resume(mut self) -> GameMachine<state_machine::Running> {
         self.game.set_state(State::Running);
-        Match {
+        GameMachine {
             game: self.game,
             _marker: PhantomData,
         }
     }
 }
 
-impl Match<match_state::QuarterBreak> {
-
+impl GameMachine<state_machine::QuarterBreak> {
     pub fn advance_quarter(
         mut self,
-    ) -> Result<Match<match_state::Paused>, Match<match_state::Finished>> {
+    ) -> Result<GameMachine<state_machine::Paused>, GameMachine<state_machine::Finished>> {
         self.game.next_quarter();
         if self.game.state() == State::GameEnd || self.game.quarter() == Quarter::None {
-            Err(Match {
+            Err(GameMachine {
                 game: self.game,
                 _marker: PhantomData,
             })
         } else {
-            Ok(Match {
+            Ok(GameMachine {
                 game: self.game,
                 _marker: PhantomData,
             })
@@ -118,11 +113,10 @@ impl Match<match_state::QuarterBreak> {
 }
 
 pub trait ModifiableScore {
-
     fn add_score(&mut self, team: Team, score: Score);
 }
 
-impl<S> ModifiableScore for Match<S>
+impl<S> ModifiableScore for GameMachine<S>
 where
     S: CanModifyScore,
 {
@@ -132,13 +126,28 @@ where
 }
 
 pub trait CanModifyScore {}
-impl CanModifyScore for match_state::Idle {}
-impl CanModifyScore for match_state::Running {}
-impl CanModifyScore for match_state::Paused {}
-impl CanModifyScore for match_state::QuarterBreak {}
+impl CanModifyScore for state_machine::Idle {}
+impl CanModifyScore for state_machine::Running {}
+impl CanModifyScore for state_machine::Paused {}
+impl CanModifyScore for state_machine::QuarterBreak {}
 
-impl<S> Match<S> {
+impl<S> ScoreRead for GameMachine<S> {
+    fn score(&self, team: Team) -> u16 {
+        self.game.score(team)
+    }
 
+    fn scores(&self) -> Scores {
+        self.game.scores()
+    }
+}
+
+impl<S: CanModifyScore> ScoreWrite for GameMachine<S> {
+    fn add_score(&mut self, team: Team, score: Score) {
+        self.game.add_score(team, score);
+    }
+}
+
+impl<S> GameMachine<S> {
     #[must_use]
     pub const fn game(&self) -> &Game {
         &self.game

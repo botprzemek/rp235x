@@ -7,7 +7,6 @@ members = [
     "hmi/hmi-tauri",
     "master",
     "worker",
-    "web/*",
 ]
 default-members = [
     "crates/basketball",
@@ -17,9 +16,6 @@ default-members = [
     "configurator",
     "hmi",
     "master",
-    "web/web-receiver",
-    "web/web-mutator",
-    "web/web-transporter",
 ]
 
 [workspace.package]

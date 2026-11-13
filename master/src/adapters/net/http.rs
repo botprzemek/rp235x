@@ -12,7 +12,6 @@ pub struct WebDriver {
 }
 
 impl WebDriver {
-
     #[must_use]
     pub fn new(listener: TcpListener) -> Self {
         Self { listener }
@@ -26,9 +25,7 @@ impl WebDriver {
 
     pub async fn run(self, services: Arc<Services>) {
         let server = Router::new()
-
             .merge(WebsocketHandler::create(Arc::clone(&services)))
-            .nest("/api", GameHandler::create(services))
             .layer(CorsLayer::permissive());
 
         axum::serve(self.listener, server)

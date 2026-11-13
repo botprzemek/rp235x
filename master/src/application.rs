@@ -65,7 +65,7 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         }
     }
 
-    pub async fn with_http(self) -> Application<Present, UdpState> {
+    pub fn with_http(self) -> Application<Present, UdpState> {
         match &self.http_address {
             Some(address) => println!("INFO: Listening on http://{address}"),
             None => println!("INFO: HTTP listener is not enabled... omitting"),
@@ -80,7 +80,7 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         }
     }
 
-    pub async fn with_udp(self) -> Application<HttpState, Present> {
+    pub fn with_udp(self) -> Application<HttpState, Present> {
         match &self.udp_address {
             Some(address) => println!("INFO: Listening on udp://{address}"),
             None => println!("INFO: UDP listener is not enabled... omitting"),
@@ -95,7 +95,7 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
         }
     }
 
-    pub async fn start(self) -> Arc<Services> {
+    pub async fn run(self) {
         let database = match &self.database_path {
             Some(path) => {
                 println!("INFO: Using ReDB database at {}", path.display());
@@ -151,17 +151,11 @@ impl<HttpState, UdpState> Application<HttpState, UdpState> {
             WorkerDriver::new(socket).spawn(Arc::clone(&services));
         }
 
-        services
-    }
-
-    pub async fn run(self) {
-        let _services = self.start().await;
         Self::wait_for_shutdown().await;
     }
 }
 
 impl ApplicationBuilder<Absent, Absent> {
-
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -175,7 +169,6 @@ impl ApplicationBuilder<Absent, Absent> {
 }
 
 impl<HttpState, UdpState> ApplicationBuilder<HttpState, UdpState> {
-
     #[must_use]
     pub fn database_path<P: AsRef<Path>>(mut self, path: P) -> Self {
         self.database_path = Some(path.as_ref().to_path_buf());

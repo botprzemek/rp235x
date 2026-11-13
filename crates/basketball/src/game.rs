@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use crate::{Discipline, Quarter, Scorable, Score, Scores, State, Team, layout};
+use crate::{Discipline, Quarter, Score, ScoreRead, ScoreWrite, Scores, State, Team, layout};
 
 use net::{ClientPacket, ServerPacket};
 
@@ -58,14 +58,16 @@ impl TryFrom<ServerPacket> for Game {
     }
 }
 
-impl Scorable for Game {
+impl ScoreWrite for Game {
     fn add_score(&mut self, team: Team, score: Score) {
         match team {
             Team::Home => self.home_score = self.home_score.saturating_add(score.into()),
             Team::Away => self.away_score = self.away_score.saturating_add(score.into()),
         }
     }
+}
 
+impl ScoreRead for Game {
     fn score(&self, team: Team) -> u16 {
         match team {
             Team::Home => self.home_score,

@@ -7,9 +7,7 @@ async fn main() {
         .udp_address("0.0.0.0:9000")
         .build()
         .with_http()
-        .await
         .with_udp()
-        .await
         .run()
         .await;
 }

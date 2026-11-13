@@ -20,14 +20,18 @@ pub struct Scores {
     pub away: u16,
 }
 
-pub trait Scorable {
-
-    fn add_score(&mut self, team: Team, score: Score);
-
+pub trait ScoreRead {
     fn score(&self, team: Team) -> u16;
 
     fn scores(&self) -> Scores;
 }
+
+pub trait ScoreWrite {
+    fn add_score(&mut self, team: Team, score: Score);
+}
+
+pub trait Scorable: ScoreRead + ScoreWrite {}
+impl<T: ScoreRead + ScoreWrite> Scorable for T {}
 
 impl From<Score> for u8 {
     fn from(score: Score) -> Self {
